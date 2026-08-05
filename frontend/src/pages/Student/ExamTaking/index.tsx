@@ -24,6 +24,7 @@ const ExamTaking = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [paper, setPaper] = useState<Paper | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [current, setCurrent] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -96,17 +97,18 @@ const ExamTaking = () => {
       try {
         const res = await getPaper(Number(examId));
         if (!res.data) {
-          message.error(res.message || '获取试卷失败');
+          setLoadError(res.message || '获取试卷失败');
           return;
         }
         setPaper(res.data);
         setAnswers(res.data.saved_answers || {});
+        setLoadError(null);
       } catch (error) {
-        message.error('获取试卷失败');
+        setLoadError('获取试卷失败');
       }
     };
     fetchPaper();
-  }, [examId, navigate, message]);
+  }, [examId, message]);
 
   const handleAnswerChange = (questionId: number, value: AnswerValue) => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -119,7 +121,19 @@ const ExamTaking = () => {
   const progress = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
   const warn = timeLeft <= 300;
 
-  if (!paper) return null;
+  if (!paper) {
+    if (loadError) {
+      return (
+        <div style={{ padding: 48, textAlign: 'center' }}>
+          <p style={{ marginBottom: 16 }}>{loadError}</p>
+          <Button type="primary" onClick={() => navigate(-1)}>
+            返回
+          </Button>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const autoAdvance = (q: { id: number; type: QuestionType }, value: AnswerValue) => {
     handleAnswerChange(q.id, value);

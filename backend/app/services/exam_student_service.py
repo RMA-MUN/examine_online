@@ -40,7 +40,11 @@ async def start_exam(db: AsyncSession, exam_id: int, student_id: int):
     exam = await db.get(Exam, exam_id)
     if not exam or exam.status != "published":
         return None, "考试不存在或未发布"
-    
+
+    now = datetime.now()
+    if now < exam.start_time:
+        return None, "考试尚未开始"
+
     # 检查是否已参加过
     result = await db.execute(
         select(ExamRecord).where(
@@ -49,6 +53,9 @@ async def start_exam(db: AsyncSession, exam_id: int, student_id: int):
         )
     )
     existing_record = result.scalar_one_or_none()
+    if now > exam.end_time and not (existing_record and existing_record.status == "ongoing"):
+        return None, "考试已结束"
+
     if existing_record and existing_record.status == "ongoing":
         return existing_record, None
     

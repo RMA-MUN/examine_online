@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.main import app
+from app.models.answer import Answer
+from app.models.ai_grading_task import AiGradingTask
 from app.models.exam_record import ExamRecord
 from app.models.question import Question
 from app.models.user import User
@@ -45,12 +47,21 @@ async def _make_submitted_record(db: AsyncSession, student: User, owner: User) -
         "end_time": datetime(2026, 8, 10, 12, 0, 0), "duration": 120,
         "status": "published",
     })
-    db.add(Question(exam_id=exam.id, type="essay", content="简述",
-                    answer="要点", score=10, sort_order=1))
+    question = Question(exam_id=exam.id, type="essay", content="简述",
+                        answer="要点", score=10, sort_order=1)
+    db.add(question)
+    await db.flush()
     record = ExamRecord(student_id=student.id, exam_id=exam.id,
                         start_time=datetime.now(), status="submitted",
                         score=7)
     db.add(record)
+    await db.flush()
+    answer = Answer(record_id=record.id, question_id=question.id,
+                    student_answer="要点", score=7, grading_source="ai")
+    db.add(answer)
+    await db.flush()
+    db.add(AiGradingTask(answer_id=answer.id, status="completed",
+                         last_error="boom"))
     await db.commit()
     await db.refresh(record)
     return record
@@ -108,5 +119,6 @@ async def test_result_omits_last_error(client, db: AsyncSession):
     record = await _make_submitted_record(db, student, student)
     resp = await client.get(f"/api/records/{record.id}/result", headers=_auth_header(student))
     body = resp.json()
+    assert body["data"]
     for answer in body["data"]:
         assert "last_error" not in answer["ai_grading"]
