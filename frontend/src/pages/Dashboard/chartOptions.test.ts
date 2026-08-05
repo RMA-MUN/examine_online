@@ -1,6 +1,15 @@
 import type { AdminDashboardData, StudentDashboardData, TeacherDashboardData } from '../../types/dashboard';
 import {
+  buildAdminClassDistOption,
+  buildAdminCourseExamOption,
+  buildAdminExamAvgOption,
+  buildAdminExamParticipationOption,
+  buildAdminExamPassRateOption,
+  buildAdminExamStatusOption,
+  buildAdminPendingOption,
   buildAdminRoleOption,
+  buildAdminScoreDistOption,
+  buildAdminSwitchOption,
   buildStudentPassRateOption,
   buildStudentScoreOption,
   buildTeacherPendingOption,
@@ -77,17 +86,36 @@ test('option builders keep empty datasets as empty series', () => {
   expect(recentOption.series[0].data).toEqual([]);
 });
 
+const admin: AdminDashboardData = {
+  role: 'admin',
+  stats: { student_count: 4, teacher_count: 2, admin_count: 1, exam_count: 3 },
+  role_distribution: [
+    { role: 'teacher', count: 2 },
+    { role: 'admin', count: 1 },
+    { role: 'student', count: 4 },
+  ],
+  recent_users: [],
+  exam_status_distribution: [
+    { status: 'published', count: 2 },
+    { status: 'finished', count: 1 },
+  ],
+  exams_per_course: [{ course_name: '计算机网络', count: 2 }],
+  exam_avg_scores: [{ exam_id: 1, exam_title: '期中考试', avg_score: 75.5 }],
+  exam_pass_rates: [{ exam_id: 1, exam_title: '期中考试', pass_rate: 50 }],
+  score_distribution: [
+    { label: '0-59', count: 1 },
+    { label: '60-69', count: 0 },
+    { label: '70-79', count: 0 },
+    { label: '80-89', count: 1 },
+    { label: '90-100', count: 0 },
+  ],
+  exam_participation: [{ exam_id: 1, exam_title: '期中考试', count: 2 }],
+  pending_grading_by_exam: [{ exam_id: 1, exam_title: '期中考试', pending_count: 1 }],
+  switch_counts_by_exam: [{ exam_id: 1, exam_title: '期中考试', switch_count: 3 }],
+  class_student_distribution: [{ class_name: '计科2401班', count: 2 }],
+};
+
 test('admin role option keeps labels and colors tied to roles', () => {
-  const admin: AdminDashboardData = {
-    role: 'admin',
-    stats: { student_count: 4, teacher_count: 2, admin_count: 1, exam_count: 3 },
-    role_distribution: [
-      { role: 'teacher', count: 2 },
-      { role: 'admin', count: 1 },
-      { role: 'student', count: 4 },
-    ],
-    recent_users: [],
-  };
   const option = buildAdminRoleOption(admin) as any;
   expect(
     option.series[0].data.map((item: any) => [item.name, item.itemStyle.color])
@@ -96,4 +124,61 @@ test('admin role option keeps labels and colors tied to roles', () => {
     ['管理员', '#1BAF7A'],
     ['学生', '#2A78D6'],
   ]);
+});
+
+test('admin exam status option maps status codes to Chinese labels', () => {
+  const option = buildAdminExamStatusOption(admin) as any;
+  expect(option.series[0].data).toEqual([
+    { name: '已发布', value: 2 },
+    { name: '已结束', value: 1 },
+  ]);
+});
+
+test('admin course exam option maps courses to counts', () => {
+  const option = buildAdminCourseExamOption(admin) as any;
+  expect(option.xAxis.data).toEqual(['计算机网络']);
+  expect(option.series[0].data).toEqual([2]);
+});
+
+test('admin exam average option maps titles to avg scores', () => {
+  const option = buildAdminExamAvgOption(admin) as any;
+  expect(option.xAxis.data).toEqual(['期中考试']);
+  expect(option.series[0].data).toEqual([75.5]);
+});
+
+test('admin exam pass rate option caps y axis at 100', () => {
+  const option = buildAdminExamPassRateOption(admin) as any;
+  expect(option.xAxis.data).toEqual(['期中考试']);
+  expect(option.series[0].data).toEqual([50]);
+  expect(option.yAxis.max).toBe(100);
+});
+
+test('admin score distribution option keeps all five buckets', () => {
+  const option = buildAdminScoreDistOption(admin) as any;
+  expect(option.xAxis.data).toEqual(['0-59', '60-69', '70-79', '80-89', '90-100']);
+  expect(option.series[0].data).toEqual([1, 0, 0, 1, 0]);
+});
+
+test('admin exam participation option maps titles to counts', () => {
+  const option = buildAdminExamParticipationOption(admin) as any;
+  expect(option.xAxis.data).toEqual(['期中考试']);
+  expect(option.series[0].data).toEqual([2]);
+});
+
+test('admin pending grading option maps exams to pending counts', () => {
+  const option = buildAdminPendingOption(admin) as any;
+  expect(option.xAxis.data).toEqual(['期中考试']);
+  expect(option.series[0].data).toEqual([1]);
+});
+
+test('admin switch count option maps exams to switch totals', () => {
+  const option = buildAdminSwitchOption(admin) as any;
+  expect(option.xAxis.data).toEqual(['期中考试']);
+  expect(option.series[0].data).toEqual([3]);
+});
+
+test('admin class distribution option maps classes to student counts', () => {
+  const option = buildAdminClassDistOption(admin) as any;
+  expect(option.xAxis.data).toEqual(['计科2401班']);
+  expect(option.series[0].data).toEqual([2]);
 });

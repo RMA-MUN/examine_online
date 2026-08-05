@@ -62,6 +62,15 @@ export interface AdminDashboardData {
     role: UserRole;
     created_at: string;
   }>;
+  exam_status_distribution: Array<{ status: string; count: number }>;
+  exams_per_course: Array<{ course_name: string; count: number }>;
+  exam_avg_scores: Array<{ exam_id: number; exam_title: string; avg_score: number }>;
+  exam_pass_rates: Array<{ exam_id: number; exam_title: string; pass_rate: number }>;
+  score_distribution: Array<{ label: string; count: number }>;
+  exam_participation: Array<{ exam_id: number; exam_title: string; count: number }>;
+  pending_grading_by_exam: Array<{ exam_id: number; exam_title: string; pending_count: number }>;
+  switch_counts_by_exam: Array<{ exam_id: number; exam_title: string; switch_count: number }>;
+  class_student_distribution: Array<{ class_name: string; count: number }>;
 }
 
 export type DashboardData = StudentDashboardData | TeacherDashboardData | AdminDashboardData;

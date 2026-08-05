@@ -162,3 +162,159 @@ export const buildAdminRoleOption = (
     },
   ],
 });
+
+const adminStatusText: Record<string, string> = {
+  draft: '草稿',
+  published: '已发布',
+  ongoing: '进行中',
+  finished: '已结束',
+};
+
+const rotateLabel = (count: number) => ({
+  interval: 0,
+  rotate: count > 6 ? 30 : 0,
+});
+
+const barSeries = (name: string, data: number[], color: string) => ({
+  name,
+  type: 'bar' as const,
+  data,
+  itemStyle: { color, borderRadius: [4, 4, 0, 0] },
+});
+
+export const buildAdminExamStatusOption = (
+  data: AdminDashboardData
+): EChartsOption => ({
+  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+  legend: { bottom: 0 },
+  series: [
+    {
+      type: 'pie',
+      radius: ['40%', '70%'],
+      label: { formatter: '{b}\n{c}' },
+      data: data.exam_status_distribution.map((item) => ({
+        name: adminStatusText[item.status] || item.status,
+        value: item.count,
+      })),
+    },
+  ],
+});
+
+export const buildAdminCourseExamOption = (
+  data: AdminDashboardData
+): EChartsOption => ({
+  ...cartesianBase,
+  xAxis: {
+    type: 'category',
+    data: data.exams_per_course.map((item) => item.course_name),
+    axisLabel: rotateLabel(data.exams_per_course.length),
+  },
+  yAxis: { type: 'value', minInterval: 1 },
+  series: [
+    barSeries('考试数量', data.exams_per_course.map((item) => item.count), colors.primary),
+  ],
+});
+
+export const buildAdminExamAvgOption = (
+  data: AdminDashboardData
+): EChartsOption => ({
+  ...cartesianBase,
+  xAxis: {
+    type: 'category',
+    data: data.exam_avg_scores.map((item) => item.exam_title),
+    axisLabel: rotateLabel(data.exam_avg_scores.length),
+  },
+  yAxis: { type: 'value', min: 0 },
+  series: [
+    barSeries('平均分', data.exam_avg_scores.map((item) => item.avg_score), colors.primary),
+  ],
+});
+
+export const buildAdminExamPassRateOption = (
+  data: AdminDashboardData
+): EChartsOption => ({
+  ...cartesianBase,
+  xAxis: {
+    type: 'category',
+    data: data.exam_pass_rates.map((item) => item.exam_title),
+    axisLabel: rotateLabel(data.exam_pass_rates.length),
+  },
+  yAxis: { type: 'value', min: 0, max: 100 },
+  series: [
+    barSeries('及格率', data.exam_pass_rates.map((item) => item.pass_rate), colors.success),
+  ],
+});
+
+export const buildAdminScoreDistOption = (
+  data: AdminDashboardData
+): EChartsOption => ({
+  ...cartesianBase,
+  xAxis: {
+    type: 'category',
+    data: data.score_distribution.map((item) => item.label),
+  },
+  yAxis: { type: 'value', minInterval: 1 },
+  series: [
+    barSeries('人数', data.score_distribution.map((item) => item.count), colors.primary),
+  ],
+});
+
+export const buildAdminExamParticipationOption = (
+  data: AdminDashboardData
+): EChartsOption => ({
+  ...cartesianBase,
+  xAxis: {
+    type: 'category',
+    data: data.exam_participation.map((item) => item.exam_title),
+    axisLabel: rotateLabel(data.exam_participation.length),
+  },
+  yAxis: { type: 'value', minInterval: 1 },
+  series: [
+    barSeries('参与人数', data.exam_participation.map((item) => item.count), colors.primary),
+  ],
+});
+
+export const buildAdminPendingOption = (
+  data: AdminDashboardData
+): EChartsOption => ({
+  ...cartesianBase,
+  xAxis: {
+    type: 'category',
+    data: data.pending_grading_by_exam.map((item) => item.exam_title),
+    axisLabel: rotateLabel(data.pending_grading_by_exam.length),
+  },
+  yAxis: { type: 'value', minInterval: 1 },
+  series: [
+    barSeries('待批改题数', data.pending_grading_by_exam.map((item) => item.pending_count), colors.warning),
+  ],
+});
+
+export const buildAdminSwitchOption = (
+  data: AdminDashboardData
+): EChartsOption => ({
+  ...cartesianBase,
+  xAxis: {
+    type: 'category',
+    data: data.switch_counts_by_exam.map((item) => item.exam_title),
+    axisLabel: rotateLabel(data.switch_counts_by_exam.length),
+  },
+  yAxis: { type: 'value', minInterval: 1 },
+  series: [
+    barSeries('切屏次数', data.switch_counts_by_exam.map((item) => item.switch_count), colors.secondary),
+  ],
+});
+
+export const buildAdminClassDistOption = (
+  data: AdminDashboardData
+): EChartsOption => ({
+  ...cartesianBase,
+  xAxis: {
+    type: 'category',
+    data: data.class_student_distribution.map((item) => item.class_name),
+    axisLabel: rotateLabel(data.class_student_distribution.length),
+  },
+  yAxis: { type: 'value', minInterval: 1 },
+  series: [
+    barSeries('学生人数', data.class_student_distribution.map((item) => item.count), colors.primary),
+  ],
+});

@@ -73,6 +73,24 @@ const adminData: AdminDashboardData = {
     { role: 'admin', count: 1 },
   ],
   recent_users: [],
+  exam_status_distribution: [
+    { status: 'published', count: 2 },
+    { status: 'finished', count: 1 },
+  ],
+  exams_per_course: [{ course_name: '计算机网络', count: 2 }],
+  exam_avg_scores: [{ exam_id: 1, exam_title: '期中考试', avg_score: 75.5 }],
+  exam_pass_rates: [{ exam_id: 1, exam_title: '期中考试', pass_rate: 50 }],
+  score_distribution: [
+    { label: '0-59', count: 1 },
+    { label: '60-69', count: 0 },
+    { label: '70-79', count: 0 },
+    { label: '80-89', count: 1 },
+    { label: '90-100', count: 0 },
+  ],
+  exam_participation: [{ exam_id: 1, exam_title: '期中考试', count: 2 }],
+  pending_grading_by_exam: [{ exam_id: 1, exam_title: '期中考试', pending_count: 1 }],
+  switch_counts_by_exam: [{ exam_id: 1, exam_title: '期中考试', switch_count: 3 }],
+  class_student_distribution: [{ class_name: '计科2401班', count: 2 }],
 };
 
 const renderDashboard = (data: StudentDashboardData | TeacherDashboardData | AdminDashboardData) => {
