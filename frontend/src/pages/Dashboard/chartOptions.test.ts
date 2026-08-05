@@ -23,6 +23,14 @@ test('student score option maps scores and pass lines', () => {
   expect(option.series[1].data).toEqual([60]);
 });
 
+test('student score option highlights a single bar and shows both values', () => {
+  const option = buildStudentScoreOption(student) as any;
+  expect(option.tooltip.trigger).toBe('item');
+  const html = option.tooltip.formatter({ dataIndex: 0 });
+  expect(html).toContain('得分：82');
+  expect(html).toContain('及格线：60');
+});
+
 test('student pass rate option clamps invalid percentages', () => {
   const option = buildStudentPassRateOption({
     ...student,

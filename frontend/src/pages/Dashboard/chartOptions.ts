@@ -21,7 +21,7 @@ const roleColors = {
 
 const cartesianBase: EChartsOption = {
   animationDuration: 450,
-  tooltip: { trigger: 'axis' },
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
   grid: { left: 48, right: 24, top: 36, bottom: 48 },
   textStyle: { fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif' },
 };
@@ -30,6 +30,16 @@ export const buildStudentScoreOption = (
   data: StudentDashboardData
 ): EChartsOption => ({
   ...cartesianBase,
+  tooltip: {
+    trigger: 'item',
+    formatter: (params) => {
+      const item = Array.isArray(params) ? params[0] : params;
+      const record = data.recent_records[item?.dataIndex ?? 0];
+      return record
+        ? `${record.exam_title}\n得分：${record.score}\n及格线：${record.pass_score}`
+        : '';
+    },
+  },
   legend: { data: ['得分', '及格线'] },
   xAxis: {
     type: 'category',
