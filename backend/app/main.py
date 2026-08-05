@@ -22,13 +22,17 @@ from app.api.admin_classes import router as admin_classes_router
 from app.api.admin_teacher_subjects import router as admin_teacher_subjects_router
 from app.workers.ai_grading_worker import run_worker
 
+"""FastAPI 应用入口：创建应用实例、注册路由与中间件，并随服务生命周期启停 AI 评分 worker。"""
+
 setup_logging()
 logger = logging.getLogger("app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """应用生命周期管理：启动时自动建表并启动 AI 评分 worker，关闭时取消 worker 任务。"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # 后台协程持续轮询数据库中的待评分任务
     worker_task = asyncio.create_task(run_worker())
     logger.info("AI 评分 worker 已随服务启动")
     yield
@@ -41,6 +45,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="在线考试系统", version="1.0.0", lifespan=lifespan)
 
+# 仅允许前端开发服务器跨域访问；使用凭证模式时来源必须显式列出，不能写成 "*"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -62,9 +67,11 @@ app.include_router(admin_teacher_subjects_router)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    """HTTP 请求日志中间件：记录每个请求的方法、路径、状态码与耗时。"""
     start = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
+    # 4xx/5xx 响应用 warning 级别记录，便于快速发现异常请求
     log = logger.warning if response.status_code >= 400 else logger.info
     log(
         "%s %s -> %s (%.1fms)",
@@ -77,9 +84,11 @@ async def log_requests(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    """全局异常兜底处理器：记录完整堆栈并统一返回 500，避免向客户端暴露内部细节。"""
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(status_code=500, content={"detail": "服务器内部错误"})
 
 @app.get("/api/health")
 async def health_check():
+    """健康检查接口，用于探测服务是否存活。"""
     return {"status": "ok"}

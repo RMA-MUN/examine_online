@@ -1,3 +1,5 @@
+"""学生考试服务：开始考试、获取试卷、自动保存答案、交卷与客观题自动批改。"""
+
 import json
 import random
 import re
@@ -11,6 +13,7 @@ from app.models.answer import Answer
 from app.redis_client import redis_client
 from app.services.ai_grading_service import enqueue_ai_grading_task
 
+# 判断题答案的各种合法写法统一归一化为"对"/"错"
 _JUDGE_ANSWER_MAP = {
     "TRUE": "对", "FALSE": "错",
     "正确": "对", "错误": "错",
@@ -22,10 +25,12 @@ _JUDGE_ANSWER_MAP = {
 
 
 def _normalize_answer(q_type: str, value) -> str:
+    """归一化答案：统一大小写；多选题按字母排序使选项顺序不影响判定；判断题映射为对/错。"""
     if value is None:
         return ""
     v = str(value).strip().upper()
     if q_type == "multiple":
+        # 多选题去分隔符后排序，避免 "AB" 与 "BA" 被判定为不同答案
         v = re.sub(r"[,，\s]+", "", v)
         v = "".join(sorted(v))
     if q_type == "judge":
@@ -33,6 +38,10 @@ def _normalize_answer(q_type: str, value) -> str:
     return v
 
 async def start_exam(db: AsyncSession, exam_id: int, student_id: int):
+    """学生开始考试：校验资格/考试状态/时间，创建考试记录并缓存试卷。
+
+    :return: 元组 (考试记录或 None, 错误信息或 None)
+    """
     from app.services.exam_service import is_student_eligible
     if not await is_student_eligible(db, exam_id, student_id):
         return None, "你没有参加该考试的资格"
@@ -40,7 +49,11 @@ async def start_exam(db: AsyncSession, exam_id: int, student_id: int):
     exam = await db.get(Exam, exam_id)
     if not exam or exam.status != "published":
         return None, "考试不存在或未发布"
-    
+
+    now = datetime.now()
+    if now < exam.start_time:
+        return None, "考试尚未开始"
+
     # 检查是否已参加过
     result = await db.execute(
         select(ExamRecord).where(
@@ -49,6 +62,10 @@ async def start_exam(db: AsyncSession, exam_id: int, student_id: int):
         )
     )
     existing_record = result.scalar_one_or_none()
+    # 考试已过截止时间时：已有进行中记录的考生仍可继续，其余一律拒绝
+    if now > exam.end_time and not (existing_record and existing_record.status == "ongoing"):
+        return None, "考试已结束"
+
     if existing_record and existing_record.status == "ongoing":
         return existing_record, None
     
@@ -72,6 +89,7 @@ async def start_exam(db: AsyncSession, exam_id: int, student_id: int):
     )
     questions = result.scalars().all()
     
+    # 考试开启随机顺序时，为每个考生打乱题目顺序
     if exam.random_order:
         random.shuffle(questions)
     
@@ -81,6 +99,7 @@ async def start_exam(db: AsyncSession, exam_id: int, student_id: int):
         "record_id": record.id,
         "questions": [{"id": q.id, "order": i} for i, q in enumerate(questions)]
     }
+    # 缓存有效期与考试时长一致，防止乱序泄露给其他请求
     await redis_client.set(
         f"exam:paper:{exam_id}:{student_id}",
         json.dumps(paper_data),
@@ -90,6 +109,7 @@ async def start_exam(db: AsyncSession, exam_id: int, student_id: int):
     return record, None
 
 async def get_my_records(db: AsyncSession, student_id: int):
+    """查询学生的考试记录列表（含考试标题），按开始时间倒序。"""
     result = await db.execute(
         select(ExamRecord, Exam)
         .join(Exam, Exam.id == ExamRecord.exam_id)
@@ -112,11 +132,41 @@ async def get_my_records(db: AsyncSession, student_id: int):
     ]
 
 async def get_paper(db: AsyncSession, exam_id: int, student_id: int):
+    """获取试卷：优先取 Redis 缓存，缓存丢失时从数据库重建。
+
+    :return: 元组 (试卷数据或 None, 错误信息或 None)
+    """
     # 从Redis获取缓存的试卷
     cached = await redis_client.get(f"exam:paper:{exam_id}:{student_id}")
     if not cached:
-        return None, "考试未开始或已结束"
-    
+        # 缓存丢失（如 Redis 重启）：校验记录后从数据库重建试卷
+        result = await db.execute(
+            select(ExamRecord).where(
+                ExamRecord.student_id == student_id,
+                ExamRecord.exam_id == exam_id,
+            )
+        )
+        record = result.scalar_one_or_none()
+        exam = await db.get(Exam, exam_id)
+        if not record or record.status != "ongoing" or not exam:
+            return None, "考试未开始或已结束"
+        result = await db.execute(
+            select(Question).where(Question.exam_id == exam_id).order_by(Question.id)
+        )
+        questions = result.scalars().all()
+        # 重建时无法还原随机顺序，按题目 ID 顺序生成
+        paper_data = {
+            "exam_id": exam_id,
+            "record_id": record.id,
+            "questions": [{"id": q.id, "order": i} for i, q in enumerate(questions)],
+        }
+        await redis_client.set(
+            f"exam:paper:{exam_id}:{student_id}",
+            json.dumps(paper_data),
+            ex=exam.duration * 60,
+        )
+        cached = json.dumps(paper_data)
+
     paper_data = json.loads(cached)
     record_id = paper_data["record_id"]
     
@@ -155,6 +205,10 @@ async def get_paper(db: AsyncSession, exam_id: int, student_id: int):
     }, None
 
 async def save_answers(db: AsyncSession, exam_id: int, student_id: int, answers: dict):
+    """自动保存作答：写入 Redis 暂存，供断线重连/交卷时恢复。
+
+    :return: 元组 (是否成功, 错误信息或 None)
+    """
     # 获取考试记录
     result = await db.execute(
         select(ExamRecord).where(
@@ -177,6 +231,10 @@ async def save_answers(db: AsyncSession, exam_id: int, student_id: int, answers:
     return True, None
 
 async def submit_exam(db: AsyncSession, exam_id: int, student_id: int, submitted_answers: dict = None):
+    """交卷：持久化答案并对客观题自动批改，主观题送入 AI 评分队列。
+
+    :return: 元组 (考试记录或 None, 错误信息或 None)
+    """
     # 获取考试记录
     result = await db.execute(
         select(ExamRecord).where(
@@ -231,13 +289,14 @@ async def submit_exam(db: AsyncSession, exam_id: int, student_id: int, submitted
         db.add(answer)
         await db.flush()
         if q.type == "essay":
+            # 简答题异步交给 AI 评分，批改完成后再重算总分
             answer.grading_source = "pending"
             await enqueue_ai_grading_task(db, answer.id)
         elif q.type == "blank" and answer.is_correct is False:
             # 填空题判错时送 AI 复核（容错大小写、空格等差异）
             await enqueue_ai_grading_task(db, answer.id)
     
-    # 更新考试记录
+    # 更新考试记录：总分此时只含客观题得分，主观题得分由后续批改叠加
     record.submit_time = datetime.now()
     record.score = total_score
     record.status = "submitted"

@@ -1,4 +1,3 @@
-import dayjs from 'dayjs';
 import type { Exam } from '../../../types/exam';
 
 export const EXAM_CARD_COLORS: [string, string][] = [
@@ -10,16 +9,19 @@ export const EXAM_CARD_COLORS: [string, string][] = [
   ['#5B7C99', '#7195B2'],
 ];
 
-export type ExamDisplayStatus = 'not_started' | 'ongoing' | 'finished';
+export type ExamDisplayStatus = 'not_taken' | 'ongoing' | 'finished';
 
 export const getExamDisplayStatus = (
-  exam: Pick<Exam, 'start_time' | 'end_time'>,
-  now: Date = new Date()
+  exam: Pick<Exam, 'student_record_status'>,
 ): ExamDisplayStatus => {
-  const cur = dayjs(now);
-  if (cur.isBefore(dayjs(exam.start_time))) return 'not_started';
-  if (cur.isAfter(dayjs(exam.end_time))) return 'finished';
-  return 'ongoing';
+  if (exam.student_record_status === 'ongoing') return 'ongoing';
+  if (
+    exam.student_record_status === 'submitted' ||
+    exam.student_record_status === 'graded'
+  ) {
+    return 'finished';
+  }
+  return 'not_taken';
 };
 
 export const getExamCardColor = (title: string): [string, string] => {

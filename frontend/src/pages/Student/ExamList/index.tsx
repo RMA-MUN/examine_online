@@ -23,7 +23,11 @@ const ExamList = () => {
 
   const handleStart = async (record: Exam) => {
     try {
-      await startExam(record.id);
+      const res = await startExam(record.id);
+      if (res.code !== 200) {
+        message.error(res.message || '开始考试失败');
+        return;
+      }
       navigate(`/exams/${record.id}/take`, { state: { duration: record.duration } });
     } catch (error) {
       message.error('开始考试失败');
@@ -68,6 +72,14 @@ const ExamList = () => {
               const displayStatus = getExamDisplayStatus(exam);
               const [from, to] = getExamCardColor(exam.title);
               const canStart = displayStatus !== 'finished';
+              const statusLabel =
+                displayStatus === 'not_taken' ? '未参加'
+                : displayStatus === 'ongoing' ? '进行中'
+                : '已完成';
+              const buttonText =
+                displayStatus === 'not_taken' ? '开始考试'
+                : displayStatus === 'ongoing' ? '继续考试'
+                : '已提交';
               return (
                 <div
                   key={exam.id}
@@ -78,10 +90,7 @@ const ExamList = () => {
                   <div className="exam-card-cover" style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}>
                     <span className="exam-card-initial">{exam.title.slice(0, 1)}</span>
                     <span className="exam-card-status">
-                      <StatusTag
-                        status={displayStatus}
-                        label={displayStatus === 'not_started' ? '未开始' : displayStatus === 'ongoing' ? '进行中' : '已结束'}
-                      />
+                      <StatusTag status={displayStatus === 'not_taken' ? 'not_started' : displayStatus} label={statusLabel} />
                     </span>
                   </div>
                   <div className="exam-card-body">
@@ -101,11 +110,8 @@ const ExamList = () => {
                           handleStart(exam);
                         }}
                       >
-                        {displayStatus === 'ongoing' ? '继续考试' : displayStatus === 'finished' ? '已结束' : '开始考试'}
+                        {buttonText}
                       </Button>
-                      <span className="exam-card-hint">
-                        {displayStatus === 'not_started' ? `${dayjs(exam.start_time).format('YYYY-MM-DD HH:mm')} 开考` : ''}
-                      </span>
                     </div>
                   </div>
                 </div>

@@ -1,3 +1,5 @@
+"""题目批量导入服务：解析 Excel/Word 文件中的题目并逐行校验，收集错误信息。"""
+
 import re
 import io
 from dataclasses import dataclass
@@ -8,6 +10,7 @@ from pydantic import BaseModel, field_validator
 
 
 class QuestionType(str, Enum):
+    """题目类型枚举，value 为模板中的中文标识。"""
     single = "单选"
     multiple = "多选"
     judge = "判断"
@@ -16,6 +19,7 @@ class QuestionType(str, Enum):
 
 
 class QuestionImportItem(BaseModel):
+    """导入题目的数据模型，字段级校验保证入库前数据合法。"""
     type: QuestionType
     content: str
     options: Optional[str] = None
@@ -26,6 +30,7 @@ class QuestionImportItem(BaseModel):
     @field_validator("content")
     @classmethod
     def content_not_empty(cls, v):
+        """校验题目内容非空。"""
         if not v or not v.strip():
             raise ValueError("题目内容不能为空")
         return v.strip()
@@ -33,6 +38,7 @@ class QuestionImportItem(BaseModel):
     @field_validator("answer")
     @classmethod
     def answer_not_empty(cls, v):
+        """校验答案非空。"""
         if not v or not v.strip():
             raise ValueError("正确答案不能为空")
         return v.strip()
@@ -40,6 +46,7 @@ class QuestionImportItem(BaseModel):
     @field_validator("score")
     @classmethod
     def score_positive(cls, v):
+        """校验分值必须为正数。"""
         if v <= 0:
             raise ValueError("分值必须大于0")
         return v
@@ -47,6 +54,7 @@ class QuestionImportItem(BaseModel):
 
 @dataclass
 class QuestionImportError:
+    """单条导入错误的描述信息，row 为出错行号，便于用户定位。"""
     row: int
     type: str = ""
     content_preview: str = ""
@@ -63,7 +71,10 @@ def _normalize_option(line: str) -> str:
 
 
 async def parse_excel(file: UploadFile) -> tuple[list[QuestionImportItem], list[QuestionImportError]]:
-    """Parse Excel file and return questions and errors."""
+    """解析 Excel 文件中的题目。
+
+    :return: 元组 (合法题目列表, 错误列表)；校验失败的题目不会进入合法列表
+    """
     import openpyxl
     
     content = await file.read()
@@ -81,6 +92,7 @@ async def parse_excel(file: UploadFile) -> tuple[list[QuestionImportItem], list[
         if not any(row):
             continue
 
+        # 逐列取前 6 个字段，不足 6 列时补齐空字符串
         row_data = [str(cell).strip() if cell else "" for cell in row]
         type_str, content, options, answer, score_str, analysis = row_data[:6] if len(row_data) >= 6 else row_data + [""] * (6 - len(row_data))
 
@@ -90,6 +102,7 @@ async def parse_excel(file: UploadFile) -> tuple[list[QuestionImportItem], list[
         try:
             q_type = QuestionType(type_str)
         except ValueError:
+            # 题型不在枚举范围内，记录错误并跳过该行
             errors.append(QuestionImportError(
                 row=row_idx, type=type_str, content_preview=content_preview,
                 field="题型", current_value=type_str,
@@ -149,6 +162,7 @@ async def parse_excel(file: UploadFile) -> tuple[list[QuestionImportItem], list[
         # Validate answer format by type
         answer = answer.strip()
         if q_type == QuestionType.single:
+            # 单选答案必须是单个大写字母
             if not re.match(r'^[A-Z]$', answer):
                 errors.append(QuestionImportError(
                     row=row_idx, type=type_str, content_preview=content_preview,
@@ -157,6 +171,7 @@ async def parse_excel(file: UploadFile) -> tuple[list[QuestionImportItem], list[
                 ))
                 continue
         elif q_type == QuestionType.multiple:
+            # 多选答案必须为多个大写字母的组合
             if not re.match(r'^[A-Z]+$', answer) or len(answer) < 2:
                 errors.append(QuestionImportError(
                     row=row_idx, type=type_str, content_preview=content_preview,
@@ -165,6 +180,7 @@ async def parse_excel(file: UploadFile) -> tuple[list[QuestionImportItem], list[
                 ))
                 continue
         elif q_type == QuestionType.judge:
+            # 判断题答案允许中英文多种写法，全部视为合法
             valid_judge = ["是", "对", "正确", "true", "True", "TRUE",
                           "错", "不对", "错误", "false", "False", "FALSE"]
             if answer not in valid_judge:
@@ -181,6 +197,7 @@ async def parse_excel(file: UploadFile) -> tuple[list[QuestionImportItem], list[
             if score <= 0:
                 raise ValueError()
         except (ValueError, TypeError):
+            # 分值必须能转换为正整数，否则该行整题作废
             errors.append(QuestionImportError(
                 row=row_idx, type=type_str, content_preview=content_preview,
                 field="分值", current_value=score_str or "",
@@ -204,7 +221,10 @@ async def parse_excel(file: UploadFile) -> tuple[list[QuestionImportItem], list[
 
 
 async def parse_word(file: UploadFile) -> tuple[list[QuestionImportItem], list[QuestionImportError]]:
-    """Parse Word file and return questions and errors."""
+    """解析 Word 文件中的题目（以 --- 分隔的题目块，内含【题目】【选项】等标记）。
+
+    :return: 元组 (合法题目列表, 错误列表)
+    """
     from docx import Document
     
     content = await file.read()
@@ -214,6 +234,7 @@ async def parse_word(file: UploadFile) -> tuple[list[QuestionImportItem], list[Q
     full_text = "\n".join([p.text for p in doc.paragraphs])
 
     # Split by --- separator
+    # 每个以 --- 分隔的文本块视为一道完整的题目
     blocks = re.split(r'\n---\n|\r\n---\r\n|\n---\r\n|\r\n---\n', full_text)
 
     questions = []
@@ -227,6 +248,7 @@ async def parse_word(file: UploadFile) -> tuple[list[QuestionImportItem], list[Q
         row = block_idx + 1  # For error reporting
 
         # Extract fields using regex
+        # 正则提取【题目】【选项】【答案】【分值】【解析】各标记下的内容
         type_match = re.search(r'【题目】(.+?)(?=【|$)', block, re.DOTALL)
         content = type_match.group(1).strip() if type_match else ""
 
@@ -243,6 +265,7 @@ async def parse_word(file: UploadFile) -> tuple[list[QuestionImportItem], list[Q
         analysis = analysis_match.group(1).strip() if analysis_match else ""
 
         # Try to detect question type from section header or content
+        # 优先从块内的小节标题/提示词推断题型
         type_str = ""
         type_patterns = [
             (r'一、单选题|单选题?', "单选"),
@@ -257,6 +280,7 @@ async def parse_word(file: UploadFile) -> tuple[list[QuestionImportItem], list[Q
                 break
 
         # If no type found in block, try to infer from answer format
+        # 无法识别时根据答案格式回退推断：单个大写字母为单选、多个为多选、对/错为判断
         if not type_str:
             if re.match(r'^[A-Z]$', answer):
                 type_str = "单选"
@@ -267,6 +291,7 @@ async def parse_word(file: UploadFile) -> tuple[list[QuestionImportItem], list[Q
                 type_str = "判断"
             elif not options_raw:
                 # No options, could be blank or essay
+                # 无选项时：题干含下划线/“填空”字样判为填空，否则视为简答
                 if "____" in content or "填空" in content:
                     type_str = "填空"
                 else:
@@ -319,6 +344,7 @@ async def parse_word(file: UploadFile) -> tuple[list[QuestionImportItem], list[Q
                     ))
                     break
             else:
+                # 全部选项合法后统一去除字母前缀，只保留选项内容
                 options = "\n".join(_normalize_option(line) for line in option_lines)
 
         # Validate options required for choice questions
@@ -395,7 +421,7 @@ async def parse_word(file: UploadFile) -> tuple[list[QuestionImportItem], list[Q
 
 
 def get_import_summary(questions: list[QuestionImportItem]) -> dict:
-    """Get summary statistics for parsed questions."""
+    """统计解析结果：题目总数与各题型数量。"""
     type_counts = {}
     for q in questions:
         type_name = q.type.value

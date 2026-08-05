@@ -1,3 +1,5 @@
+"""考试-班级关联模型模块：定义考试面向的班级。"""
+
 from sqlalchemy import Column, Integer, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -5,6 +7,8 @@ from app.database import Base
 
 
 class ExamClass(Base):
+    """考试-班级关联表：指定某场考试面向哪些班级发布，班级内学生自动获得考试资格。"""
+
     __tablename__ = "exam_classes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

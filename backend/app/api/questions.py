@@ -1,3 +1,5 @@
+"""题目管理接口：负责题目模板下载、文件批量导入、题目列表/创建/修改/删除，及JSON批量导入。"""
+
 import os
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File as FastAPIFile
@@ -22,6 +24,7 @@ async def download_template(
     format: str,
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
+    """下载题目导入模板文件（excel/word），仅教师/管理员可调用。"""
     if format not in ("excel", "word"):
         raise HTTPException(status_code=400, detail="格式不支持，仅支持 excel 或 word")
 
@@ -50,7 +53,9 @@ async def import_questions_from_file(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
+    """通过上传 Excel/Word 文件批量导入题目到指定考试，仅教师/管理员可调用。"""
     # Validate file extension
+    # 校验文件扩展名，仅支持 xlsx/docx
     if not file.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
 
@@ -59,12 +64,14 @@ async def import_questions_from_file(
         raise HTTPException(status_code=400, detail="仅支持 .xlsx 或 .docx 格式")
 
     # Parse file
+    # 按扩展名选择对应的解析器（Excel 或 Word）
     if ext == ".xlsx":
         questions, errors = await parse_excel(file)
     else:
         questions, errors = await parse_word(file)
 
     # Return errors if any
+    # 解析存在错误时直接返回错误明细，不写入数据库
     if errors:
         return {
             "code": 400,
@@ -86,9 +93,11 @@ async def import_questions_from_file(
         }
 
     # Get summary
+    # 统计导入结果概况（各类题型数量等）
     summary = get_import_summary(questions)
 
     # Create questions in database - wrap in transaction to prevent partial writes
+    # 逐条写入数据库，任一条失败即回滚，防止部分写入
     try:
         created_questions = []
         for q in questions:
@@ -111,6 +120,7 @@ async def import_questions_from_file(
         })
     except Exception as e:
         # Rollback on any error to prevent partial writes
+        # 回滚事务并记录日志后返回 500
         await db.rollback()
         logger.exception("导入题目失败 exam_id=%s", exam_id)
         raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
@@ -123,6 +133,7 @@ async def list_questions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """分页获取指定考试的题目列表，所有已登录用户均可调用。"""
     questions, total = await get_questions(db, exam_id, page, page_size)
     questions_data = [QuestionResponse.model_validate(q).model_dump() for q in questions]
     return paginated_response(questions_data, total, page, page_size)
@@ -134,6 +145,7 @@ async def create_new_question(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
+    """在指定考试下创建单道题目，仅教师/管理员可调用。"""
     question = await create_question(db, exam_id, question_data.model_dump())
     return success_response(data=QuestionResponse.model_validate(question).model_dump())
 
@@ -144,6 +156,7 @@ async def import_questions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
+    """通过 JSON 数据批量导入题目到指定考试，仅教师/管理员可调用。"""
     questions = await batch_create_questions(
         db, exam_id, [q.model_dump() for q in import_data.questions]
     )
@@ -157,6 +170,7 @@ async def update_question_info(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
+    """修改指定题目的内容，仅教师/管理员可调用。"""
     question = await update_question(db, question_id, question_data.model_dump(exclude_unset=True))
     if not question:
         raise HTTPException(status_code=404, detail="题目不存在")
@@ -168,6 +182,7 @@ async def delete_question_info(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
+    """删除指定题目，仅教师/管理员可调用。"""
     success = await delete_question(db, question_id)
     if not success:
         raise HTTPException(status_code=404, detail="题目不存在")

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { App, Table, Tag } from 'antd';
+import { App, Table, Tag, Button } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { getMyRecords } from '../../../api/exams';
 import type { ExamRecord, RecordStatus } from '../../../types/record';
 import EmptyState from '../../../components/EmptyState';
 import PageHeader from '../../../components/PageHeader';
 import PageCard from '../../../components/PageCard';
+import ResultDrawer from './ResultDrawer';
 
 const statusMap: Record<RecordStatus, { color: string; text: string }> = {
   ongoing: { color: 'processing', text: '进行中' },
@@ -17,6 +18,13 @@ const MyRecords = () => {
   const { message } = App.useApp();
   const [records, setRecords] = useState<ExamRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [resultRecord, setResultRecord] = useState<ExamRecord | null>(null);
+  const [resultOpen, setResultOpen] = useState(false);
+
+  const openResult = (record: ExamRecord) => {
+    setResultRecord(record);
+    setResultOpen(true);
+  };
 
   const fetchRecords = useCallback(async () => {
     setLoading(true);
@@ -58,6 +66,19 @@ const MyRecords = () => {
       render: (v?: string) => (v ? new Date(v).toLocaleString() : '-'),
     },
     { title: '切屏次数', dataIndex: 'switch_count', key: 'switch_count' },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_, record: ExamRecord) => (
+        <Button
+          type="link"
+          disabled={record.status === 'ongoing'}
+          onClick={() => openResult(record)}
+        >
+          查看详情
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -77,6 +98,11 @@ const MyRecords = () => {
               />
             ),
           }}
+        />
+        <ResultDrawer
+          record={resultRecord}
+          open={resultOpen}
+          onClose={() => setResultOpen(false)}
         />
       </PageCard>
     </div>

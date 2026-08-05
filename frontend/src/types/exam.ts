@@ -23,6 +23,7 @@ export interface Exam {
   created_at: string;
   assigned_class_ids?: number[];
   student_overrides?: StudentOverride[];
+  student_record_status?: 'ongoing' | 'submitted' | 'graded' | null;
 }
 
 export interface ExamInput {

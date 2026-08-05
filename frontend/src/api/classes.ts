@@ -3,7 +3,7 @@ import type { ApiResponse, Paginated } from '../types/api';
 import type { Class, ClassCreate, ClassUpdate } from '../types/class';
 
 export const getClasses = (params?: { page?: number; page_size?: number; keyword?: string }): Promise<ApiResponse<Paginated<Class>>> =>
-  axios.get('/api/admin/classes', { params }) as Promise<ApiResponse<Paginated<Class>>>;
+  axios.get('/api/classes', { params }) as Promise<ApiResponse<Paginated<Class>>>;
 
 export const createClass = (data: ClassCreate): Promise<ApiResponse<Class>> =>
   axios.post('/api/admin/classes', data) as Promise<ApiResponse<Class>>;
