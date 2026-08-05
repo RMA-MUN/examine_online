@@ -52,6 +52,48 @@ beforeEach(() => {
   } as never);
 });
 
+const wrongBlankAnswer: Answer = {
+  id: 2,
+  record_id: 1,
+  question_id: 2,
+  student_answer: '上海',
+  score: 0,
+  is_correct: false,
+  created_at: '2026-08-05 09:00:00',
+  question: { type: 'blank', content: '我国首都是哪座城市？', score: 5, answer: '北京' },
+  ai_grading: {
+    answer_id: 2,
+    question_id: 2,
+    record_id: 1,
+    grading_status: 'completed',
+    grading_source: 'ai',
+    ai_score: 5,
+    ai_feedback: { reasoning: '答案等价，判为正确', confidence: 0.95 },
+  },
+};
+
+test('判错的填空题在结果详情中展示 AI 评分依据', async () => {
+  (gradingApi.getMyRecordAnswers as jest.Mock).mockResolvedValueOnce({
+    code: 200,
+    message: 'success',
+    data: [wrongBlankAnswer],
+  } as never);
+  render(
+    <App>
+      <MyRecords />
+    </App>
+  );
+  await screen.findByText('期中考试');
+  fireEvent.click(screen.getByRole('button', { name: /查看详情/ }));
+  await waitFor(() => {
+    expect(screen.getByText('我国首都是哪座城市？')).toBeInTheDocument();
+  });
+  fireEvent.click(screen.getByText(/AI 评分依据/));
+  await waitFor(() => {
+    expect(screen.getByText(/答案等价，判为正确/)).toBeInTheDocument();
+  });
+});
+
 test('我的记录展示完成状态并可查看结果详情', async () => {
   render(
     <App>
