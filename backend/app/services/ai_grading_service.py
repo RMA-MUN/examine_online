@@ -2,7 +2,8 @@
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, or_, and_, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai_grading_task import AiGradingTask
@@ -48,14 +49,25 @@ def validate_grading_result(
 
 
 async def enqueue_ai_grading_task(db: AsyncSession, answer_id: int) -> AiGradingTask:
-    """将答案加入 AI 评分队列；已有任务时直接返回，保证幂等。"""
-    existing = await db.scalar(select(AiGradingTask).where(AiGradingTask.answer_id == answer_id))
-    if existing:
-        return existing
-    task = AiGradingTask(answer_id=answer_id, status="pending")
-    db.add(task)
-    await db.flush()
-    return task
+    """将答案加入 AI 评分队列；已有任务时直接返回，保证幂等与并发安全。
+
+    并发入队时两个事务可能同时通过 SELECT 检查，后插入的那个会撞上
+    answer_id 唯一约束；此时回滚保存点后重读，返回先入队的那条任务。
+    """
+    for _ in range(2):
+        existing = await db.scalar(select(AiGradingTask).where(AiGradingTask.answer_id == answer_id))
+        if existing:
+            return existing
+        try:
+            async with db.begin_nested():
+                task = AiGradingTask(answer_id=answer_id, status="pending")
+                db.add(task)
+                await db.flush()
+            return task
+        except IntegrityError:
+            # 竞态：另一请求已抢先入队同一答案，保存点已回滚，重读后返回既有任务
+            continue
+    raise IntegrityError("AI 评分任务入队失败：存在未预期的唯一约束冲突")
 
 
 async def claim_next_ai_grading_task(
@@ -94,16 +106,47 @@ async def claim_next_ai_grading_task(
     return task
 
 
+async def renew_ai_grading_lock(
+    db: AsyncSession,
+    task_id: int,
+    worker_id: str,
+    now: datetime | None = None,
+) -> bool:
+    """续期任务锁：仅当任务仍由当前 worker 持有（processing 且 locked_by 匹配）时刷新锁定时间。
+
+    :return: 续期成功返回 True；任务已被回收或完成返回 False，调用方应放弃本次处理
+    """
+    now = now or datetime.now()
+    result = await db.execute(
+        update(AiGradingTask)
+        .where(
+            AiGradingTask.id == task_id,
+            AiGradingTask.status == "processing",
+            AiGradingTask.locked_by == worker_id,
+        )
+        .values(locked_at=now)
+    )
+    await db.commit()
+    return result.rowcount == 1
+
+
 async def complete_ai_grading_task(
     db: AsyncSession,
     task_id: int,
     result: AiGradingResult,
     model_name: str,
-) -> None:
-    """AI 评分成功：写入评分结果，并在无人工干预时同步学生分数与总分。"""
+    worker_id: str | None = None,
+) -> bool:
+    """AI 评分成功：写入评分结果，并在无人工干预时同步学生分数与总分。
+
+    仅当任务仍由当前 worker 持有（processing 且 locked_by 匹配）时写入；
+    任务已被回收或由其他 worker 完成时返回 False，避免旧结果覆盖新评分。
+    """
     task = await db.scalar(select(AiGradingTask).where(AiGradingTask.id == task_id).with_for_update())
     if not task:
         raise ValueError("AI 评分任务不存在")
+    if task.status != "processing" or (worker_id and task.locked_by != worker_id):
+        return False
     answer = await db.scalar(select(Answer).where(Answer.id == task.answer_id).with_for_update())
     if not answer:
         raise ValueError("AI 评分答案不存在")
@@ -128,17 +171,25 @@ async def complete_ai_grading_task(
     task.locked_at = None
     task.locked_by = None
     await db.commit()
+    return True
 
 
 async def fail_ai_grading_task(
     db: AsyncSession,
     task_id: int,
     error: Exception | str,
+    worker_id: str | None = None,
     now: datetime | None = None,
 ) -> None:
-    """AI 评分失败：按指数退避安排重试，超过最大次数后标记失败。"""
+    """AI 评分失败：按指数退避安排重试，超过最大次数后标记失败。
+
+    仅当任务仍由当前 worker 持有（processing 且 locked_by 匹配）时记录失败；
+    任务已被回收或由其他 worker 完成时直接跳过，防止把已完成任务重新排队。
+    """
     task = await db.scalar(select(AiGradingTask).where(AiGradingTask.id == task_id).with_for_update())
     if not task:
+        return
+    if task.status != "processing" or (worker_id and task.locked_by != worker_id):
         return
     now = now or datetime.now()
     message = str(error).replace("\n", " ")[:500]

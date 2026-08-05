@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -20,7 +19,7 @@ from app.api.grading import router as grading_router
 from app.api.statistics import router as statistics_router
 from app.api.admin_classes import router as admin_classes_router
 from app.api.admin_teacher_subjects import router as admin_teacher_subjects_router
-from app.workers.ai_grading_worker import run_worker
+from app.workers.ai_grading_worker import ai_grading_workers
 
 """FastAPI 应用入口：创建应用实例、注册路由与中间件，并随服务生命周期启停 AI 评分 worker。"""
 
@@ -32,15 +31,10 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理：启动时自动建表并启动 AI 评分 worker，关闭时取消 worker 任务。"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # 后台协程持续轮询数据库中的待评分任务
-    worker_task = asyncio.create_task(run_worker())
-    logger.info("AI 评分 worker 已随服务启动")
-    yield
-    worker_task.cancel()
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        pass
+    # 后台并发协程持续轮询数据库中的待评分任务，任务领取由数据库 SKIP LOCKED 仲裁
+    async with ai_grading_workers(settings.AI_WORKER_CONCURRENCY):
+        logger.info("AI 评分 worker 已随服务启动")
+        yield
     logger.info("AI 评分 worker 已随服务停止")
 
 app = FastAPI(title="在线考试系统", version="1.0.0", lifespan=lifespan)

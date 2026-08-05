@@ -1,28 +1,76 @@
 import asyncio
 import logging
 import socket
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import async_session
 from app.logging_config import setup_logging
 from app.models.answer import Answer
 from app.models.question import Question
-from app.schemas.ai_grading import AiGradingInput
+from app.schemas.ai_grading import AiGradingInput, AiGradingResult
 from app.schemas.question import RubricItem
 from app.services.ai_grading_agent import grade_essay
 from app.services.ai_grading_service import (
     claim_next_ai_grading_task,
     complete_ai_grading_task,
     fail_ai_grading_task,
+    renew_ai_grading_lock,
     validate_grading_result,
 )
 
 logger = logging.getLogger("app.worker.ai_grading")
 
 """AI 评分后台 worker：常驻协程轮询数据库中的待评分任务，调用 AI 模型评分并回写结果。"""
+
+
+@asynccontextmanager
+async def ai_grading_workers(concurrency: int = 1):
+    """启动指定数量的 AI 评分 worker 协程，退出时统一取消并等待结束。
+
+    每个协程独立领取任务（数据库 SKIP LOCKED 仲裁），并发数受数据库
+    连接池与 AI 服务限流约束，默认由配置 AI_WORKER_CONCURRENCY 控制。
+    """
+    tasks = [asyncio.create_task(run_worker()) for _ in range(max(concurrency, 1))]
+    logger.info("AI 评分 worker 已启动 %s 个并发协程", len(tasks))
+    try:
+        yield tasks
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info("AI 评分 worker 已全部停止")
+
+
+async def grade_essay_with_lock_renewal(
+    db: AsyncSession,
+    task_id: int,
+    worker_id: str,
+    grading_input: AiGradingInput,
+    renew_interval: float = 30.0,
+) -> AiGradingResult:
+    """调用 AI 评分，并在调用期间周期性续期任务锁。
+
+    防止长耗时 AI 调用（超过锁回收窗口）被其他 worker 回收导致重复评分；
+    续期失败说明任务已被回收或完成，此时取消本次 AI 调用并报错。
+    """
+    ai_call = asyncio.create_task(grade_essay(grading_input))
+    try:
+        while True:
+            done, _ = await asyncio.wait({ai_call}, timeout=renew_interval)
+            if done:
+                return ai_call.result()
+            if not await renew_ai_grading_lock(db, task_id, worker_id):
+                ai_call.cancel()
+                await asyncio.gather(ai_call, return_exceptions=True)
+                raise RuntimeError("AI 评分任务锁已失效，可能已被其他 worker 回收")
+    finally:
+        if not ai_call.done():
+            ai_call.cancel()
 
 
 async def run_worker() -> None:
@@ -74,7 +122,7 @@ async def run_worker() -> None:
                         settings.AI_MODEL,
                         settings.AI_BASE_URL,
                     )
-                    result = await grade_essay(grading_input)
+                    result = await grade_essay_with_lock_renewal(db, task_id, worker_id, grading_input)
                     logger.info(
                         "AI 模型返回结果 answer_id=%s score=%s confidence=%s reasoning=%s",
                         answer_id,
@@ -83,17 +131,19 @@ async def run_worker() -> None:
                         (result.reasoning or "")[:80],
                     )
                     validate_grading_result(result, rubric or None, question.score)
-                    # 校验通过后把评分结果写入答案，完成本次评分任务
-                    await complete_ai_grading_task(db, task_id, result, settings.AI_MODEL or "unknown")
-                    logger.info(
-                        "AI 评分任务完成 answer_id=%s score=%s 已写入答案",
-                        answer_id,
-                        result.score,
-                    )
+                    # 校验通过后把评分结果写入答案，完成本次评分任务；锁已失效时放弃写入
+                    if not await complete_ai_grading_task(db, task_id, result, settings.AI_MODEL or "unknown", worker_id):
+                        logger.warning("AI 评分任务已被回收或完成，放弃写入 answer_id=%s", answer_id)
+                    else:
+                        logger.info(
+                            "AI 评分任务完成 answer_id=%s score=%s 已写入答案",
+                            answer_id,
+                            result.score,
+                        )
                 except Exception as exc:
                     # 单任务失败兜底：回滚事务并记录失败原因，不影响 worker 继续处理其他任务
                     await db.rollback()
-                    await fail_ai_grading_task(db, task_id, exc)
+                    await fail_ai_grading_task(db, task_id, exc, worker_id)
                     logger.exception("AI 评分失败 answer_id=%s", answer_id)
         except Exception as exc:
             # 循环级兜底：即使出现未预期异常也保证 worker 存活，稍后重试

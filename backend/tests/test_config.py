@@ -13,6 +13,7 @@ def test_ai_settings_use_safe_defaults():
     assert settings.AI_MODEL is None
     assert settings.AI_TIMEOUT_SECONDS == 60
     assert settings.AI_MAX_RETRIES == 2
+    assert settings.AI_WORKER_CONCURRENCY == 4
 
 
 def test_database_pool_settings_use_safe_defaults():

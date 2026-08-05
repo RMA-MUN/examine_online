@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     AI_TIMEOUT_SECONDS: int = 60
     AI_MAX_RETRIES: int = 2
     AI_WORKER_POLL_SECONDS: float = 1.0
+    # 单进程内并发运行的 AI 评分 worker 协程数；任务领取由数据库 SKIP LOCKED 仲裁，协程间互不干扰
+    AI_WORKER_CONCURRENCY: int = 4
     # 数据库连接池：高并发场景下适当放大（本地 32G 内存机器可安全容纳 40 个连接）
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 20
