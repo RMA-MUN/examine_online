@@ -4,7 +4,14 @@ from app.config import settings
 
 """数据库模块：提供异步 SQLAlchemy 引擎、会话工厂以及供 FastAPI 依赖注入的数据库会话。"""
 
-engine = create_async_engine(settings.DATABASE_URL, echo=False)
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=False,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_pre_ping=True,
+)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 class Base(DeclarativeBase):

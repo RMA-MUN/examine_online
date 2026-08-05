@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from app.models.user import User
-from app.utils.security import hash_password
+from app.utils.security import hash_password_async
 
 async def get_users(db: AsyncSession, page: int = 1, page_size: int = 10, role: str = None):
     """分页查询用户列表，可按角色过滤。
@@ -40,7 +40,7 @@ async def create_user(db: AsyncSession, user_data: dict):
     # 只有学生才分配班级，其他角色一律不关联班级
     user = User(
         username=user_data["username"],
-        password_hash=hash_password(user_data["password"]),
+        password_hash=await hash_password_async(user_data["password"]),
         role=user_data["role"],
         name=user_data["name"],
         email=user_data.get("email"),

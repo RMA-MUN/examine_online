@@ -29,3 +29,8 @@ dependencies = [
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple"
 default = true
+
+[dependency-groups]
+dev = [
+    "locust>=2.46.3",
+]

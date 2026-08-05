@@ -3,7 +3,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User
-from app.utils.security import verify_password, create_access_token, hash_password
+from app.utils.security import verify_password_async, create_access_token, hash_password_async
 from app.redis_client import redis_client
 
 async def authenticate_user(db: AsyncSession, username: str, password: str):
@@ -13,7 +13,7 @@ async def authenticate_user(db: AsyncSession, username: str, password: str):
     """
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not await verify_password_async(password, user.password_hash):
         return None
     return user
 
@@ -34,11 +34,11 @@ async def change_password(db: AsyncSession, user: User, old_password: str, new_p
 
     :return: 元组 (是否成功, 错误信息)；成功时错误信息为 None
     """
-    if not verify_password(old_password, user.password_hash):
+    if not await verify_password_async(old_password, user.password_hash):
         return False, "原密码错误"
     if len(new_password) < 6:
         return False, "新密码长度不能少于6位"
-    user.password_hash = hash_password(new_password)
+    user.password_hash = await hash_password_async(new_password)
     await db.commit()
     await db.refresh(user)
     return True, None

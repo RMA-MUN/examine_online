@@ -5,7 +5,7 @@ import random
 import re
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from app.models.exam import Exam
 from app.models.question import Question
 from app.models.exam_record import ExamRecord
@@ -260,6 +260,10 @@ async def submit_exam(db: AsyncSession, exam_id: int, student_id: int, submitted
     )
     questions = result.scalars().all()
     questions_map = {q.id: q for q in questions}
+
+    # 幂等处理：清除该记录已有的答案行（如进行中占位答案、或上次提交中途失败残留），
+    # 避免与唯一键 uk_record_question 冲突导致重复交卷 500
+    await db.execute(delete(Answer).where(Answer.record_id == record.id))
     
     total_score = 0
     

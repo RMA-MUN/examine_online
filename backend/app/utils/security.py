@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import asyncio
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -15,6 +16,14 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """校验明文密码与存储的哈希值是否匹配。"""
     return pwd_context.verify(plain_password, hashed_password)
+
+async def hash_password_async(password: str) -> str:
+    """在线程池中执行 bcrypt 哈希，避免阻塞事件循环。"""
+    return await asyncio.to_thread(hash_password, password)
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """在线程池中执行 bcrypt 校验，避免阻塞事件循环（登录高并发场景关键）。"""
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """签发 JWT 访问令牌，可自定义过期时间，默认使用配置中的过期分钟数。"""
