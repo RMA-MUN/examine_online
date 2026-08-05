@@ -7,6 +7,7 @@ from app.services.ai_grading_service import retry_ai_grading_task
 from app.services.teacher_subject_service import can_teacher_manage_exam
 from app.utils.deps import get_current_user, require_role
 from app.utils.response import success_response, paginated_response
+from app.models.exam_record import ExamRecord
 from app.models.user import User
 
 router = APIRouter(tags=["阅卷管理"])
@@ -94,3 +95,21 @@ async def finalize_record_action(
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
     return success_response(data={"id": record.id, "status": record.status})
+
+@router.get("/api/records/{record_id}/result")
+async def get_my_result(
+    record_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["student"]))
+):
+    record = await db.get(ExamRecord, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    if record.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权查看该记录")
+    if record.status not in ("submitted", "graded"):
+        raise HTTPException(status_code=403, detail="考试尚未提交")
+    answers = await get_record_answers(db, record_id)
+    for answer in answers:
+        answer["ai_grading"].pop("last_error", None)
+    return success_response(data=answers)
