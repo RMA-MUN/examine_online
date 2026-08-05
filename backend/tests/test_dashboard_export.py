@@ -14,6 +14,7 @@ from app.services.dashboard_export_service import (
 )
 from app.api import statistics
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from fastapi.responses import StreamingResponse
 
 
@@ -262,6 +263,23 @@ async def test_student_cannot_request_teacher_dataset(student_db, student_user):
         )
 
     assert exc_info.value.status_code == 400
+
+
+def test_cors_exposes_content_disposition_header():
+    from app.main import app
+
+    with TestClient(app) as client:
+        response = client.options(
+            "/api/statistics/dashboard/export?format=csv",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+    assert response.status_code == 200
+    exposed_headers = response.headers.get("access-control-expose-headers", "")
+    assert "content-disposition" in exposed_headers.lower()
 
 
 @pytest.mark.asyncio
