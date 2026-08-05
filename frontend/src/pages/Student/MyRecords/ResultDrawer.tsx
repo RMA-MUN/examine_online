@@ -50,6 +50,7 @@ const ResultDrawer = ({ record, open, onClose }: ResultDrawerProps) => {
       width={720}
       open={open}
       onClose={onClose}
+      destroyOnHidden
     >
       <Spin spinning={loading}>
         {record && (
