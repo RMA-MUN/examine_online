@@ -54,6 +54,10 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.dashboard-charts-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .dashboard-chart-card {
   min-width: 0;
 }

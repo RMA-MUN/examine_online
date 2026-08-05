@@ -367,7 +367,7 @@ const Dashboard = () => {
             </Col>
           </Row>
 
-          <div className="dashboard-charts">
+          <div className="dashboard-charts dashboard-charts-three">
             <PageCard className="dashboard-section dashboard-chart-card">
               <h3 className="dashboard-section-title">用户角色分布</h3>
               {data.role_distribution.length === 0 ? (
