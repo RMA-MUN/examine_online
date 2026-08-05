@@ -1,3 +1,5 @@
+"""统计服务：考试成绩统计、成绩导出与按角色聚合的仪表盘数据。"""
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime
@@ -9,6 +11,10 @@ from app.models.user import User
 from app.models.answer import Answer
 
 async def get_exam_statistics(db: AsyncSession, exam_id: int):
+    """统计某场考试的整体成绩：人数、平均分、最高/最低分、及格率与分数分布。
+
+    :return: 统计字典；无作答记录时返回 None
+    """
     result = await db.execute(
         select(ExamRecord).where(ExamRecord.exam_id == exam_id)
     )
@@ -20,6 +26,7 @@ async def get_exam_statistics(db: AsyncSession, exam_id: int):
     # 计算统计数据
     scores = [r.score for r in records]
     total_students = len(records)
+    # 防止除零：无记录时平均分取 0（此处 records 非空，仍保留兜底）
     avg_score = sum(scores) / total_students if total_students > 0 else 0
     
     # 获取及格分数
@@ -28,6 +35,7 @@ async def get_exam_statistics(db: AsyncSession, exam_id: int):
     total_score = sum(q.score for q in questions)
     pass_score = total_score * 0.6  # 假设60%及格
     
+    # 及格判定使用 >=，恰好等于及格线也算及格
     pass_count = sum(1 for s in scores if s >= pass_score)
     pass_rate = (pass_count / total_students * 100) if total_students > 0 else 0
     
@@ -40,6 +48,7 @@ async def get_exam_statistics(db: AsyncSession, exam_id: int):
         "90-100": 0
     }
     
+    # 按分数区间累加，区间边界为左闭右开（[60,70) 等）
     for s in scores:
         if s < 60:
             distribution["0-59"] += 1
@@ -62,6 +71,7 @@ async def get_exam_statistics(db: AsyncSession, exam_id: int):
     }
 
 async def export_exam_scores(db: AsyncSession, exam_id: int):
+    """导出某场考试的全部成绩记录（学生 ID、分数、状态与时间）。"""
     result = await db.execute(
         select(ExamRecord).where(ExamRecord.exam_id == exam_id)
     )
@@ -80,9 +90,11 @@ async def export_exam_scores(db: AsyncSession, exam_id: int):
     return export_data
 
 async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
+    """按用户角色返回仪表盘统计数据：学生/教师/管理员各一套指标。"""
     now = datetime.now()
 
     if user.role == "student":
+        # 可参加的考试：状态为已发布/进行中且未到截止时间
         exam_result = await db.execute(
             select(Exam)
             .where(Exam.status.in_(["published", "ongoing"]), Exam.end_time > now)
@@ -97,9 +109,11 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
         records = record_result.scalars().all()
         my_exam_count = len(records)
 
+        # 平均分只统计已有成绩（已提交/已批改）的记录
         graded = [r for r in records if r.status in ("submitted", "graded") and r.score is not None]
         avg_score = round(sum(r.score for r in graded) / len(graded), 2) if graded else 0
 
+        # 及格率按每场考试自己的及格线（Exam.pass_score）判定
         pass_result = await db.execute(
             select(ExamRecord, Exam.pass_score)
             .join(Exam, Exam.id == ExamRecord.exam_id)
@@ -109,6 +123,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
         passed = sum(1 for r, p in pass_rows if r.score is not None and r.score >= p)
         pass_rate = round(passed / len(pass_rows) * 100, 2) if pass_rows else 0
 
+        # 即将开始的考试（未到开始时间），最多展示 2 场
         upcoming = [
             {
                 "id": e.id,
@@ -130,6 +145,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
         )
         recent_records = recent_result.scalars().all()[:5]
 
+        # 最近成绩逐条补充考试标题与及格线
         recent = []
         for r in recent_records:
             p_result = await db.execute(
@@ -160,6 +176,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
         }
 
     if user.role == "teacher":
+        # 教师数据只统计其名下课程，课程经 TeacherSubject 授权归属
         course_result = await db.execute(
             select(Course).where(Course.teacher_id == user.id)
         )
@@ -183,6 +200,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
             total_records = len(records)
             record_ids = [r.id for r in records]
             if record_ids:
+                # 待批改 = 答案评分来源仍为 pending 的题目
                 ans_result = await db.execute(
                     select(Answer).where(
                         Answer.record_id.in_(record_ids),
@@ -190,12 +208,14 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
                     )
                 )
                 answers = ans_result.scalars().all()
+                # 按考试维度聚合待批改数量
                 record_map = {r.id: r for r in records}
                 for a in answers:
                     exam_of_record = record_map[a.record_id]
                     pending_by_exam.setdefault(exam_of_record.exam_id, 0)
                     pending_by_exam[exam_of_record.exam_id] += 1
 
+        # 只列出有待批改的考试，最多 5 场
         pending_grading = []
         for e in exams:
             count = pending_by_exam.get(e.id, 0)
@@ -208,6 +228,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
         pending_grading_count = sum(pending_by_exam.values())
         pending_grading = pending_grading[:5]
 
+        # 按开始时间取最近的 5 场考试
         recent_exams = [
             {
                 "id": e.id,
@@ -237,11 +258,13 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
         await db.execute(select(func.count()).select_from(Exam))
     ).scalar_one()
 
+    # 按角色统计用户数
     role_counts = {"student": 0, "teacher": 0, "admin": 0}
     for u in all_users:
         if u.role in role_counts:
             role_counts[u.role] += 1
 
+    # 最近注册的 5 个用户
     recent_users = [
         {
             "id": u.id,

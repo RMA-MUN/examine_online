@@ -1,13 +1,17 @@
+"""答题记录模型模块：记录考生每道题的作答与阅卷结果。"""
+
 from sqlalchemy import Column, Integer, Text, Boolean, JSON, String, Enum, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
 class Answer(Base):
+    """答题记录：考生对某道题的作答内容、得分以及 AI/教师阅卷信息。"""
+
     __tablename__ = "answers"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    record_id = Column(Integer, ForeignKey("exam_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    record_id = Column(Integer, ForeignKey("exam_records.id", ondelete="CASCADE"), nullable=False, index=True)  # 考试记录ID，引用考试记录表（exam_records.id）
     question_id = Column(Integer, ForeignKey("questions.id"), nullable=False)
     student_answer = Column(Text, comment="学生答案")
     score = Column(Integer, default=0, comment="得分")

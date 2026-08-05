@@ -1,3 +1,5 @@
+"""用户管理接口：负责用户列表查询、创建、详情查询、修改与删除，仅管理员可调用。"""
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -18,6 +20,7 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["admin"]))
 ):
+    """分页获取用户列表，支持按角色筛选，仅管理员可调用。"""
     users, total = await get_users(db, page, page_size, role)
     users_data = [UserResponse.model_validate(u).model_dump() for u in users]
     return paginated_response(users_data, total, page, page_size)
@@ -28,6 +31,7 @@ async def create_new_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["admin"]))
 ):
+    """创建新用户（学生/教师/管理员账号），仅管理员可调用。"""
     user = await create_user(db, user_data.model_dump())
     return success_response(data=UserResponse.model_validate(user).model_dump())
 
@@ -37,6 +41,7 @@ async def get_user_detail(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["admin"]))
 ):
+    """获取指定用户的详细信息，仅管理员可调用。"""
     user = await get_user(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
@@ -49,6 +54,7 @@ async def update_user_info(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["admin"]))
 ):
+    """修改指定用户的信息，仅管理员可调用。"""
     user = await update_user(db, user_id, user_data.model_dump(exclude_unset=True))
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
@@ -60,6 +66,7 @@ async def delete_user_account(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["admin"]))
 ):
+    """删除指定用户的账号，仅管理员可调用。"""
     success = await delete_user(db, user_id)
     if not success:
         raise HTTPException(status_code=404, detail="用户不存在")

@@ -1,3 +1,5 @@
+"""班级管理服务：班级的增删改查、学生查询，以及删除班级时清理学生关联。"""
+
 from typing import List, Optional, Tuple
 
 from sqlalchemy import select, func
@@ -13,6 +15,10 @@ async def get_classes(
     page_size: int = 20,
     keyword: Optional[str] = None,
 ) -> Tuple[List[SchoolClass], int]:
+    """分页查询班级列表，支持按班级名称关键字模糊搜索。
+
+    :return: 元组 (当前页班级列表, 总记录数)
+    """
     query = select(SchoolClass)
     if keyword:
         query = query.where(SchoolClass.name.contains(keyword))
@@ -23,6 +29,7 @@ async def get_classes(
 
 
 async def get_all_classes(db: AsyncSession) -> List[SchoolClass]:
+    """获取全部班级，按 ID 升序返回（供下拉选择等场景使用）。"""
     result = await db.execute(select(SchoolClass).order_by(SchoolClass.id))
     return list(result.scalars().all())
 
@@ -33,6 +40,7 @@ async def create_class(
     grade: Optional[str] = None,
     description: Optional[str] = None,
 ) -> SchoolClass:
+    """创建班级。"""
     class_ = SchoolClass(name=name, grade=grade, description=description)
     db.add(class_)
     await db.commit()
@@ -47,6 +55,10 @@ async def update_class(
     grade: Optional[str] = None,
     description: Optional[str] = None,
 ) -> Optional[SchoolClass]:
+    """更新班级信息，只更新传入的非 None 字段。
+
+    :return: 更新后的班级对象；班级不存在时返回 None
+    """
     class_ = await db.get(SchoolClass, class_id)
     if not class_:
         return None
@@ -62,6 +74,10 @@ async def update_class(
 
 
 async def delete_class(db: AsyncSession, class_id: int) -> bool:
+    """删除班级。
+
+    :return: 删除成功返回 True，班级不存在返回 False
+    """
     class_ = await db.get(SchoolClass, class_id)
     if not class_:
         return False
@@ -75,6 +91,7 @@ async def delete_class(db: AsyncSession, class_id: int) -> bool:
 
 
 async def get_class_students(db: AsyncSession, class_id: int) -> List[User]:
+    """获取某班级的学生列表（仅角色为学生的用户）。"""
     result = await db.execute(
         select(User).where(User.class_id == class_id, User.role == "student")
     )

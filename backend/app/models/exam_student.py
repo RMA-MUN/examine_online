@@ -1,3 +1,5 @@
+"""考试-学生关联模型模块：在班级范围外调整考试的考生名单。"""
+
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -5,6 +7,8 @@ from app.database import Base
 
 
 class ExamStudent(Base):
+    """考试-学生关联表：在班级范围之外，对个别学生进行额外添加或排除。"""
+
     __tablename__ = "exam_students"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

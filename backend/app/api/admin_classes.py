@@ -1,3 +1,5 @@
+"""班级管理接口：负责班级的查询、创建、修改、删除及班级学生列表查询；管理类操作仅管理员可调用。"""
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -23,6 +25,7 @@ async def list_classes_for_teacher(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role(["admin", "teacher"])),
 ):
+    """分页查询班级列表（供教师选择班级使用），支持按关键词搜索，仅管理员/教师可调用。"""
     classes, total = await get_classes(db, page, page_size, keyword)
     return success_response(data={
         "items": [ClassResponse.model_validate(c).model_dump() for c in classes],
@@ -38,6 +41,7 @@ async def list_classes(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role(["admin"])),
 ):
+    """分页查询全部班级列表，支持按关键词搜索，仅管理员可调用。"""
     classes, total = await get_classes(db, page, page_size, keyword)
     return success_response(data={
         "items": [ClassResponse.model_validate(c).model_dump() for c in classes],
@@ -51,6 +55,7 @@ async def create_class_action(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role(["admin"])),
 ):
+    """创建新班级，仅管理员可调用。"""
     class_ = await create_class(db, data.name, data.grade, data.description)
     return success_response(data=ClassResponse.model_validate(class_).model_dump())
 
@@ -62,6 +67,7 @@ async def update_class_action(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role(["admin"])),
 ):
+    """修改指定班级的信息，仅管理员可调用。"""
     class_ = await update_class(db, class_id, data.name, data.grade, data.description)
     if not class_:
         return error_response(message="班级不存在")
@@ -74,6 +80,7 @@ async def delete_class_action(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role(["admin"])),
 ):
+    """删除指定班级，仅管理员可调用。"""
     if not await delete_class(db, class_id):
         return error_response(message="班级不存在")
     return success_response(message="删除成功")
@@ -85,6 +92,7 @@ async def list_class_students(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role(["admin"])),
 ):
+    """获取指定班级的学生列表，仅管理员可调用。"""
     students = await get_class_students(db, class_id)
     return success_response(data=[
         {"id": s.id, "username": s.username, "name": s.name} for s in students

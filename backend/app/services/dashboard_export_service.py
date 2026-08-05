@@ -1,4 +1,4 @@
-"""Role-scoped dashboard export data and file rendering."""
+"""仪表盘导出服务：按角色组装导出数据集，并将数据渲染为 CSV / XLSX 文件。"""
 
 import csv
 from datetime import datetime
@@ -16,6 +16,7 @@ from app.models.exam_record import ExamRecord
 from app.models.user import User
 
 
+# 各角色可导出的数据集白名单
 STUDENT_DATASETS = frozenset({"summary", "recent_records", "upcoming_exams"})
 TEACHER_DATASETS = frozenset({"summary", "pending_grading", "recent_exams"})
 ADMIN_DATASETS = frozenset({"summary", "role_distribution", "recent_users"})
@@ -26,6 +27,7 @@ _DATASETS_BY_ROLE = {
     "admin": ADMIN_DATASETS,
 }
 
+# 导出文件表头的中英文映射，默认英文列名展示为中文
 _CHINESE_HEADERS = {
     "metric": "指标",
     "value": "数值",
@@ -49,6 +51,7 @@ _CHINESE_HEADERS = {
     "created_at": "创建时间",
 }
 
+# 每个数据集应导出的列，空数据集时作为表头兜底
 _DATASET_COLUMNS = {
     "summary": ["metric", "value"],
     "recent_records": [
@@ -69,20 +72,26 @@ _DATASET_COLUMNS = {
 
 
 class DashboardExportError(ValueError):
-    """Raised when an export request cannot be rendered safely."""
+    """导出请求无法安全渲染时抛出的异常。"""
 
 
 def allowed_datasets_for_role(role: str) -> frozenset[str]:
+    """返回某角色允许导出的数据集集合。"""
     return _DATASETS_BY_ROLE.get(role, frozenset())
 
 
 def _serialise_value(value: object) -> object:
+    """导出前将 datetime 序列化为 ISO 字符串。"""
     return value.isoformat() if isinstance(value, datetime) else value
 
 
 async def get_dashboard_export_datasets(
     db: AsyncSession, user: User
 ) -> dict[str, list[dict[str, object]]]:
+    """按用户角色获取仪表盘各数据集的导出数据。
+
+    :raises DashboardExportError: 不支持的角色
+    """
     if user.role == "student":
         return await _student_datasets(db, user)
     if user.role == "teacher":
@@ -95,7 +104,9 @@ async def get_dashboard_export_datasets(
 async def _student_datasets(
     db: AsyncSession, user: User
 ) -> dict[str, list[dict[str, object]]]:
+    """组装学生视角的导出数据集：概要、最近成绩、即将开始的考试。"""
     now = datetime.now()
+    # 可参加的考试：已发布/进行中且未过截止时间
     available = (
         await db.execute(
             select(Exam)
@@ -118,11 +129,13 @@ async def _student_datasets(
         )
     ).all()
     pass_rows = [row for row in pass_rows if row[0].student_id == user.id]
+    # 平均分只统计已有成绩的记录
     graded = [
         record
         for record in records
         if record.status in ("submitted", "graded") and record.score is not None
     ]
+    # 及格判定按各考试自己的及格线，取 >= 即算及格
     passed = sum(
         1
         for record, pass_score in pass_rows
@@ -196,6 +209,7 @@ async def _student_datasets(
 async def _teacher_datasets(
     db: AsyncSession, user: User
 ) -> dict[str, list[dict[str, object]]]:
+    """组装教师视角的导出数据集：概要、待批改分布、最近考试。"""
     courses = (
         await db.execute(select(Course).where(Course.teacher_id == user.id))
     ).scalars().all()
@@ -215,6 +229,7 @@ async def _teacher_datasets(
         records = [record for record in records if record.exam_id in exam_ids]
         record_ids = [record.id for record in records]
         if record_ids:
+            # 待批改答案 = 评分来源仍为 pending 的答案
             answers = (
                 await db.execute(
                     select(Answer).where(
@@ -224,6 +239,7 @@ async def _teacher_datasets(
             ).scalars().all()
             answers = [answer for answer in answers if answer.record_id in record_ids]
 
+    # 按考试维度聚合待批改答案数
     record_exam_ids = {record.id: record.exam_id for record in records}
     pending_by_exam: dict[int, int] = {}
     for answer in answers:
@@ -260,6 +276,7 @@ async def _teacher_datasets(
 
 
 async def _admin_datasets(db: AsyncSession) -> dict[str, list[dict[str, object]]]:
+    """组装管理员视角的导出数据集：概要、角色分布、最近注册用户。"""
     users = (await db.execute(select(User))).scalars().all()
     exam_count = (await db.execute(select(func.count()).select_from(Exam))).scalar_one()
     role_counts = {"student": 0, "teacher": 0, "admin": 0}
@@ -291,6 +308,7 @@ async def _admin_datasets(db: AsyncSession) -> dict[str, list[dict[str, object]]
 
 
 def _headers(name: str, rows: list[dict[str, object]]) -> list[str]:
+    """确定导出列名：有数据时取首行键，无数据时用预设列兜底。"""
     return list(rows[0]) if rows else _DATASET_COLUMNS.get(name, [])
 
 
@@ -299,6 +317,11 @@ def render_dashboard_export(
     file_format: Literal["csv", "xlsx"],
     dataset: str | None = None,
 ) -> tuple[bytes, str, str]:
+    """将数据集渲染为指定格式的文件。
+
+    :return: 元组 (文件字节内容, MIME 类型, 文件名)
+    :raises DashboardExportError: 未知数据集或未知格式
+    """
     if file_format == "csv":
         if dataset is None or dataset not in datasets:
             raise DashboardExportError("Unknown dataset for CSV export")
@@ -313,11 +336,13 @@ def render_dashboard_export(
         if headers:
             writer.writerow({header: _CHINESE_HEADERS.get(header, header) for header in headers})
             writer.writerows(rows)
+        # utf-8-sig 带 BOM，保证 Excel 直接打开 CSV 时中文不乱码
         return output.getvalue().encode("utf-8-sig"), "text/csv; charset=utf-8", f"{dataset}.csv"
 
     if file_format == "xlsx":
         workbook = Workbook()
         workbook.remove(workbook.active)
+        # 每个数据集写入一个工作表，表头转中文并冻结首行
         for name, rows in datasets.items():
             sheet = workbook.create_sheet(name)
             headers = _headers(name, rows)
