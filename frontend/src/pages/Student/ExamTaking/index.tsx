@@ -95,11 +95,14 @@ const ExamTaking = () => {
     const fetchPaper = async () => {
       try {
         const res = await getPaper(Number(examId));
+        if (!res.data) {
+          message.error(res.message || '获取试卷失败');
+          return;
+        }
         setPaper(res.data);
         setAnswers(res.data.saved_answers || {});
       } catch (error) {
         message.error('获取试卷失败');
-        navigate('/');
       }
     };
     fetchPaper();

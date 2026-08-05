@@ -1,4 +1,3 @@
-import dayjs from 'dayjs';
 import { getExamDisplayStatus, getExamCardColor, EXAM_CARD_COLORS } from './utils';
 import type { Exam } from '../../../types/exam';
 
@@ -15,43 +14,25 @@ const makeExam = (overrides: Partial<Exam>): Exam => ({
   max_switch: 3,
   status: 'published',
   created_at: '2026-08-01 09:00:00',
+  student_record_status: null,
   ...overrides,
 });
 
-const at = (t: string) => dayjs(t).toDate();
-
 describe('getExamDisplayStatus', () => {
-  const exam = makeExam({});
-
-  it('开始前为未开始', () => {
-    expect(getExamDisplayStatus(exam, at('2026-08-10 08:59:00'))).toBe('not_started');
+  it('无记录为未参加', () => {
+    expect(getExamDisplayStatus(makeExam({}))).toBe('not_taken');
   });
 
-  it('进行中', () => {
-    expect(getExamDisplayStatus(exam, at('2026-08-10 09:30:00'))).toBe('ongoing');
+  it('ongoing 为进行中', () => {
+    expect(getExamDisplayStatus(makeExam({ student_record_status: 'ongoing' }))).toBe('ongoing');
   });
 
-  it('结束后为已结束', () => {
-    expect(getExamDisplayStatus(exam, at('2026-08-10 12:00:00'))).toBe('finished');
-  });
-});
-
-describe('getExamDisplayStatus (后端 ISO T 格式)', () => {
-  const exam = makeExam({
-    start_time: '2026-08-10T09:00:00',
-    end_time: '2026-08-10T11:00:00',
+  it('submitted 为已完成', () => {
+    expect(getExamDisplayStatus(makeExam({ student_record_status: 'submitted' }))).toBe('finished');
   });
 
-  it('开始前为未开始', () => {
-    expect(getExamDisplayStatus(exam, at('2026-08-10T08:59:00'))).toBe('not_started');
-  });
-
-  it('进行中', () => {
-    expect(getExamDisplayStatus(exam, at('2026-08-10T09:30:00'))).toBe('ongoing');
-  });
-
-  it('结束后为已结束', () => {
-    expect(getExamDisplayStatus(exam, at('2026-08-10T12:00:00'))).toBe('finished');
+  it('graded 为已完成', () => {
+    expect(getExamDisplayStatus(makeExam({ student_record_status: 'graded' }))).toBe('finished');
   });
 });
 
