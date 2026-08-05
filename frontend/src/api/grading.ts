@@ -12,6 +12,9 @@ export const getExamRecords = (
 export const getRecordAnswers = (recordId: number): Promise<ApiResponse<Answer[]>> =>
   axios.get(`/api/records/${recordId}/answers`) as Promise<ApiResponse<Answer[]>>;
 
+export const getMyRecordAnswers = (recordId: number): Promise<ApiResponse<Answer[]>> =>
+  axios.get(`/api/records/${recordId}/result`) as Promise<ApiResponse<Answer[]>>;
+
 export const gradeAnswer = (answerId: number, data: GradeRequest): Promise<ApiResponse<Answer>> =>
   axios.put(`/api/answers/${answerId}/grade`, data) as Promise<ApiResponse<Answer>>;
 
