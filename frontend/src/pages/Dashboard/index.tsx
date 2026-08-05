@@ -30,6 +30,15 @@ import {
   buildStudentScoreOption,
   buildTeacherPendingOption,
   buildTeacherRecentExamOption,
+  buildAdminExamStatusOption,
+  buildAdminCourseExamOption,
+  buildAdminExamAvgOption,
+  buildAdminExamPassRateOption,
+  buildAdminScoreDistOption,
+  buildAdminExamParticipationOption,
+  buildAdminPendingOption,
+  buildAdminSwitchOption,
+  buildAdminClassDistOption,
 } from './chartOptions';
 import './index.css';
 
@@ -358,7 +367,7 @@ const Dashboard = () => {
             </Col>
           </Row>
 
-          <div className="dashboard-charts dashboard-charts-single">
+          <div className="dashboard-charts">
             <PageCard className="dashboard-section dashboard-chart-card">
               <h3 className="dashboard-section-title">用户角色分布</h3>
               {data.role_distribution.length === 0 ? (
@@ -368,6 +377,114 @@ const Dashboard = () => {
                   className="dashboard-chart"
                   option={buildAdminRoleOption(data)}
                   ariaLabel="用户角色分布图表"
+                />
+              )}
+            </PageCard>
+            <PageCard className="dashboard-section dashboard-chart-card">
+              <h3 className="dashboard-section-title">考试状态分布</h3>
+              {data.exam_status_distribution.length === 0 ? (
+                <EmptyState title="暂无考试数据" />
+              ) : (
+                <EChart
+                  className="dashboard-chart"
+                  option={buildAdminExamStatusOption(data)}
+                  ariaLabel="考试状态分布图表"
+                />
+              )}
+            </PageCard>
+            <PageCard className="dashboard-section dashboard-chart-card">
+              <h3 className="dashboard-section-title">各课程考试数量</h3>
+              {data.exams_per_course.length === 0 ? (
+                <EmptyState title="暂无课程数据" />
+              ) : (
+                <EChart
+                  className="dashboard-chart"
+                  option={buildAdminCourseExamOption(data)}
+                  ariaLabel="各课程考试数量图表"
+                />
+              )}
+            </PageCard>
+            <PageCard className="dashboard-section dashboard-chart-card">
+              <h3 className="dashboard-section-title">各考试平均分</h3>
+              {data.exam_avg_scores.length === 0 ? (
+                <EmptyState title="暂无成绩数据" />
+              ) : (
+                <EChart
+                  className="dashboard-chart"
+                  option={buildAdminExamAvgOption(data)}
+                  ariaLabel="各考试平均分图表"
+                />
+              )}
+            </PageCard>
+            <PageCard className="dashboard-section dashboard-chart-card">
+              <h3 className="dashboard-section-title">各考试及格率</h3>
+              {data.exam_pass_rates.length === 0 ? (
+                <EmptyState title="暂无成绩数据" />
+              ) : (
+                <EChart
+                  className="dashboard-chart"
+                  option={buildAdminExamPassRateOption(data)}
+                  ariaLabel="各考试及格率图表"
+                />
+              )}
+            </PageCard>
+            <PageCard className="dashboard-section dashboard-chart-card">
+              <h3 className="dashboard-section-title">成绩分布</h3>
+              {data.score_distribution.every((item) => item.count === 0) ? (
+                <EmptyState title="暂无成绩数据" />
+              ) : (
+                <EChart
+                  className="dashboard-chart"
+                  option={buildAdminScoreDistOption(data)}
+                  ariaLabel="成绩分布图表"
+                />
+              )}
+            </PageCard>
+            <PageCard className="dashboard-section dashboard-chart-card">
+              <h3 className="dashboard-section-title">各考试参与人数</h3>
+              {data.exam_participation.length === 0 ? (
+                <EmptyState title="暂无参与数据" />
+              ) : (
+                <EChart
+                  className="dashboard-chart"
+                  option={buildAdminExamParticipationOption(data)}
+                  ariaLabel="各考试参与人数图表"
+                />
+              )}
+            </PageCard>
+            <PageCard className="dashboard-section dashboard-chart-card">
+              <h3 className="dashboard-section-title">各考试待批改量</h3>
+              {data.pending_grading_by_exam.length === 0 ? (
+                <EmptyState title="暂无待批改数据" />
+              ) : (
+                <EChart
+                  className="dashboard-chart"
+                  option={buildAdminPendingOption(data)}
+                  ariaLabel="各考试待批改量图表"
+                />
+              )}
+            </PageCard>
+            <PageCard className="dashboard-section dashboard-chart-card">
+              <h3 className="dashboard-section-title">各考试切屏次数</h3>
+              {data.switch_counts_by_exam.length === 0 ? (
+                <EmptyState title="暂无切屏数据" />
+              ) : (
+                <EChart
+                  className="dashboard-chart"
+                  option={buildAdminSwitchOption(data)}
+                  ariaLabel="各考试切屏次数图表"
+                />
+              )}
+            </PageCard>
+            <PageCard className="dashboard-section dashboard-chart-card">
+              <h3 className="dashboard-section-title">班级学生分布</h3>
+              {data.class_student_distribution.length === 0 ? (
+                <EmptyState title="暂无班级数据" />
+              ) : (
+                <EChart
+                  className="dashboard-chart"
+                  option={buildAdminClassDistOption(data)}
+                  ariaLabel="班级学生分布图表"
                 />
               )}
             </PageCard>
