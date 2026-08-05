@@ -15,6 +15,21 @@ from app.utils.response import error_response, success_response
 router = APIRouter(tags=["班级管理"])
 
 
+@router.get("/api/classes")
+async def list_classes_for_teacher(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    keyword: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role(["admin", "teacher"])),
+):
+    classes, total = await get_classes(db, page, page_size, keyword)
+    return success_response(data={
+        "items": [ClassResponse.model_validate(c).model_dump() for c in classes],
+        "total": total, "page": page, "page_size": page_size,
+    })
+
+
 @router.get("/api/admin/classes")
 async def list_classes(
     page: int = Query(1, ge=1),
