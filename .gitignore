@@ -9,6 +9,7 @@ backend/.env.*
 # ===== 本地工具 / 编辑器目录 =====
 .omo/
 .opencode/
+.codegraph/
 .superpowers/
 .worktrees/
 .idea/
