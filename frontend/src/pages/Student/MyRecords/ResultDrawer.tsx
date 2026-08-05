@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { App, Drawer, Descriptions, Tag, Spin, Collapse } from 'antd';
 import { getMyRecordAnswers } from '../../../api/grading';
+import { shouldShowAiGrading } from '../../../utils/aiGrading';
 import type { ExamRecord } from '../../../types/record';
 import type { Answer } from '../../../types/answer';
 import type { QuestionType } from '../../../types/question';
@@ -91,7 +92,7 @@ const ResultDrawer = ({ record, open, onClose }: ResultDrawerProps) => {
                   {a.is_correct === true && <Tag color="success" style={{ marginLeft: 8 }}>正确</Tag>}
                   {a.is_correct === false && <Tag color="error" style={{ marginLeft: 8 }}>错误</Tag>}
                 </p>
-                {a.question?.type === 'essay' && a.ai_grading && (
+                {shouldShowAiGrading(a) && (
                   <Collapse
                     size="small"
                     style={{ marginTop: 12 }}

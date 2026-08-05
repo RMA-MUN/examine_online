@@ -6,6 +6,7 @@ import {
   AuditOutlined,
 } from '@ant-design/icons';
 import { getRecordAnswers, gradeAnswer, finalizeRecord, retryAiGrading } from '../../../api/grading';
+import { shouldShowAiGrading } from '../../../utils/aiGrading';
 import type { ExamRecord } from '../../../types/record';
 import type { Answer, GradeRequest } from '../../../types/answer';
 import type { QuestionType } from '../../../types/question';
@@ -70,7 +71,7 @@ const GradingDrawer = ({ record, open, onClose, onChanged }: GradingDrawerProps)
       const isObjective = ['single', 'multiple', 'judge'].includes(answer.question?.type ?? '');
       const payload: GradeRequest = { score: scores[answer.id] ?? 0 };
       const aiScore = answer.ai_grading?.ai_score;
-      if (answer.question?.type === 'essay' && aiScore != null && payload.score !== aiScore) {
+      if ((answer.question?.type === 'essay' || answer.question?.type === 'blank') && aiScore != null && payload.score !== aiScore) {
         const reason = overrideReasons[answer.id]?.trim();
         if (!reason) {
           message.error('请填写修改原因');
@@ -216,7 +217,7 @@ const GradingDrawer = ({ record, open, onClose, onChanged }: GradingDrawerProps)
                 <p style={{ marginBottom: 0 }}>
                   <strong>学生答案：</strong>{a.student_answer || '（未作答）'}
                 </p>
-                {a.question?.type === 'essay' && a.ai_grading && (
+                {shouldShowAiGrading(a) && (
                   <Collapse
                     size="small"
                     style={{ marginTop: 12 }}
@@ -269,7 +270,7 @@ const GradingDrawer = ({ record, open, onClose, onChanged }: GradingDrawerProps)
                     保存
                   </Button>
                 </Space>
-                {a.question?.type === 'essay' && a.ai_grading?.ai_score != null && scores[a.id] !== a.ai_grading.ai_score && (
+                {(a.question?.type === 'essay' || a.question?.type === 'blank') && a.ai_grading?.ai_score != null && scores[a.id] !== a.ai_grading.ai_score && (
                   <Input.TextArea
                     aria-label="修改原因"
                     value={overrideReasons[a.id]}
