@@ -115,8 +115,33 @@ async def get_paper(db: AsyncSession, exam_id: int, student_id: int):
     # 从Redis获取缓存的试卷
     cached = await redis_client.get(f"exam:paper:{exam_id}:{student_id}")
     if not cached:
-        return None, "考试未开始或已结束"
-    
+        # 缓存丢失（如 Redis 重启）：校验记录后从数据库重建试卷
+        result = await db.execute(
+            select(ExamRecord).where(
+                ExamRecord.student_id == student_id,
+                ExamRecord.exam_id == exam_id,
+            )
+        )
+        record = result.scalar_one_or_none()
+        exam = await db.get(Exam, exam_id)
+        if not record or record.status != "ongoing" or not exam:
+            return None, "考试未开始或已结束"
+        result = await db.execute(
+            select(Question).where(Question.exam_id == exam_id).order_by(Question.id)
+        )
+        questions = result.scalars().all()
+        paper_data = {
+            "exam_id": exam_id,
+            "record_id": record.id,
+            "questions": [{"id": q.id, "order": i} for i, q in enumerate(questions)],
+        }
+        await redis_client.set(
+            f"exam:paper:{exam_id}:{student_id}",
+            json.dumps(paper_data),
+            ex=exam.duration * 60,
+        )
+        cached = json.dumps(paper_data)
+
     paper_data = json.loads(cached)
     record_id = paper_data["record_id"]
     
