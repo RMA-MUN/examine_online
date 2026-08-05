@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.exam import Exam
 from app.models.exam_class import ExamClass
+from app.models.exam_record import ExamRecord
 from app.models.exam_student import ExamStudent
 from app.models.teacher_subject import TeacherSubject
 from app.models.user import User
@@ -186,4 +187,16 @@ async def get_student_eligible_exams(
             eligible.append(exam)
     total = len(eligible)
     start = (page - 1) * page_size
-    return eligible[start:start + page_size], total
+    page_exams = eligible[start:start + page_size]
+    if page_exams:
+        record_result = await db.execute(
+            select(ExamRecord.student_id, ExamRecord.exam_id, ExamRecord.status)
+            .where(
+                ExamRecord.student_id == student_id,
+                ExamRecord.exam_id.in_([e.id for e in page_exams]),
+            )
+        )
+        status_map = {exam_id: status for _, exam_id, status in record_result.all()}
+        for exam in page_exams:
+            exam.student_record_status = status_map.get(exam.id)
+    return page_exams, total

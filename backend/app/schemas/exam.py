@@ -48,5 +48,6 @@ class ExamResponse(ExamBase):
     created_at: datetime
     assigned_class_ids: List[int] = []
     student_overrides: List[StudentOverride] = []
+    student_record_status: Optional[str] = None
 
     model_config = {"from_attributes": True}
