@@ -9,6 +9,7 @@ from app.models.exam import Exam
 from app.models.course import Course
 from app.models.user import User
 from app.models.answer import Answer
+from app.models.class_ import SchoolClass
 
 async def get_exam_statistics(db: AsyncSession, exam_id: int):
     """统计某场考试的整体成绩：人数、平均分、最高/最低分、及格率与分数分布。
@@ -276,6 +277,145 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
         for u in sorted(all_users, key=lambda x: x.created_at, reverse=True)[:5]
     ]
 
+    # 新增：考试状态分布（草稿/已发布/进行中/已结束）
+    status_rows = (
+        await db.execute(
+            select(Exam.status, func.count()).group_by(Exam.status)
+        )
+    ).all()
+    exam_status_distribution = [
+        {"status": s, "count": c} for s, c in status_rows
+    ]
+
+    # 新增：各课程考试数量
+    course_rows = (
+        await db.execute(
+            select(Course.name, func.count())
+            .join(Exam, Exam.course_id == Course.id)
+            .group_by(Course.id, Course.name)
+        )
+    ).all()
+    exams_per_course = [
+        {"course_name": name, "count": count} for name, count in course_rows
+    ]
+
+    # 新增：各考试平均分（仅统计已提交/已批改并且有成绩的记录）
+    avg_rows = (
+        await db.execute(
+            select(Exam.id, Exam.title, func.avg(ExamRecord.score))
+            .join(ExamRecord, ExamRecord.exam_id == Exam.id)
+            .where(
+                ExamRecord.status.in_(["submitted", "graded"]),
+                ExamRecord.score.isnot(None),
+            )
+            .group_by(Exam.id, Exam.title)
+        )
+    ).all()
+    exam_avg_scores = [
+        {"exam_id": eid, "exam_title": title, "avg_score": round(float(avg or 0), 2)}
+        for eid, title, avg in avg_rows
+    ]
+
+    # 新增：各考试及格率与全系统成绩分布（共用一次成绩查询）
+    pass_rows = (
+        await db.execute(
+            select(Exam.id, Exam.title, Exam.pass_score, ExamRecord.score)
+            .join(ExamRecord, ExamRecord.exam_id == Exam.id)
+            .where(ExamRecord.status.in_(["submitted", "graded"]))
+        )
+    ).all()
+    exam_pass_stats: dict[int, dict] = {}
+    all_scores: list[int] = []
+    for eid, title, pass_score, score in pass_rows:
+        if score is None:
+            continue
+        stat = exam_pass_stats.setdefault(
+            eid, {"title": title, "pass_score": pass_score, "scores": []}
+        )
+        stat["scores"].append(score)
+        all_scores.append(score)
+    exam_pass_rates = [
+        {
+            "exam_id": eid,
+            "exam_title": stat["title"],
+            "pass_rate": round(
+                sum(1 for s in stat["scores"] if s >= stat["pass_score"])
+                / len(stat["scores"]) * 100,
+                2,
+            ),
+        }
+        for eid, stat in exam_pass_stats.items()
+    ]
+    distribution = {"0-59": 0, "60-69": 0, "70-79": 0, "80-89": 0, "90-100": 0}
+    for s in all_scores:
+        if s < 60:
+            distribution["0-59"] += 1
+        elif s < 70:
+            distribution["60-69"] += 1
+        elif s < 80:
+            distribution["70-79"] += 1
+        elif s < 90:
+            distribution["80-89"] += 1
+        else:
+            distribution["90-100"] += 1
+    score_distribution = [
+        {"label": k, "count": v} for k, v in distribution.items()
+    ]
+
+    # 新增：各考试参与人数
+    participation_rows = (
+        await db.execute(
+            select(Exam.id, Exam.title, func.count(ExamRecord.id))
+            .join(ExamRecord, ExamRecord.exam_id == Exam.id)
+            .group_by(Exam.id, Exam.title)
+        )
+    ).all()
+    exam_participation = [
+        {"exam_id": eid, "exam_title": title, "count": count}
+        for eid, title, count in participation_rows
+    ]
+
+    # 新增：各考试待批改题目数
+    pending_rows = (
+        await db.execute(
+            select(Exam.id, Exam.title, func.count(Answer.id))
+            .join(ExamRecord, ExamRecord.exam_id == Exam.id)
+            .join(Answer, Answer.record_id == ExamRecord.id)
+            .where(Answer.grading_source == "pending")
+            .group_by(Exam.id, Exam.title)
+        )
+    ).all()
+    pending_grading_by_exam = [
+        {"exam_id": eid, "exam_title": title, "pending_count": count}
+        for eid, title, count in pending_rows
+    ]
+
+    # 新增：各考试切屏总次数
+    switch_rows = (
+        await db.execute(
+            select(Exam.id, Exam.title, func.coalesce(func.sum(ExamRecord.switch_count), 0))
+            .join(ExamRecord, ExamRecord.exam_id == Exam.id)
+            .group_by(Exam.id, Exam.title)
+        )
+    ).all()
+    switch_counts_by_exam = [
+        {"exam_id": eid, "exam_title": title, "switch_count": int(total)}
+        for eid, title, total in switch_rows
+    ]
+
+    # 新增：各班级学生人数（无班级归入"未分配班级"）
+    class_rows = (
+        await db.execute(
+            select(func.coalesce(SchoolClass.name, "未分配班级"), func.count(User.id))
+            .join(SchoolClass, SchoolClass.id == User.class_id, isouter=True)
+            .where(User.role == "student")
+            .group_by(SchoolClass.id, SchoolClass.name)
+        )
+    ).all()
+    class_student_distribution = [
+        {"class_name": name, "count": count} for name, count in class_rows
+    ]
+
     return {
         "role": user.role,
         "stats": {
@@ -288,4 +428,13 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
             {"role": k, "count": v} for k, v in role_counts.items()
         ],
         "recent_users": recent_users,
+        "exam_status_distribution": exam_status_distribution,
+        "exams_per_course": exams_per_course,
+        "exam_avg_scores": exam_avg_scores,
+        "exam_pass_rates": exam_pass_rates,
+        "score_distribution": score_distribution,
+        "exam_participation": exam_participation,
+        "pending_grading_by_exam": pending_grading_by_exam,
+        "switch_counts_by_exam": switch_counts_by_exam,
+        "class_student_distribution": class_student_distribution,
     }
