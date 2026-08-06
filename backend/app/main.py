@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
+from app.db_init import init_database
 from app.logging_config import setup_logging
 from app.models import *  # noqa: F403
 from app.api.auth import router as auth_router
@@ -28,7 +29,9 @@ logger = logging.getLogger("app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理：启动时自动建表并启动 AI 评分 worker，关闭时取消 worker 任务。"""
+    """应用生命周期管理：启动时自动建库建表并写入演示数据（init.sql），随后启动 AI 评分 worker，关闭时取消 worker 任务。"""
+    # 自动执行 backend/sql/init.sql：建库 -> 建表/老库迁移 -> 全新库时写入演示账号与数据
+    await init_database()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     # 后台并发协程持续轮询数据库中的待评分任务，任务领取由数据库 SKIP LOCKED 仲裁

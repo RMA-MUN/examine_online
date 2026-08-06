@@ -1,15 +1,475 @@
--- Large demo dataset for the Online Exam System.
--- MySQL 8.x. Targets the exam_system database; idempotent and repeatable.
--- Produces ~60 students / 6 teachers / 5 classes / 8 courses / 10 exams,
--- ~310 exam records and ~2500 answers, with AI-graded subjective answers.
--- Login password for every seeded account: Password123!
+-- ============================================================================
+-- 在线考试系统 数据库一键初始化脚本
+-- 内容：创建数据库 -> 创建全部数据表（含老库自动补列迁移）-> 初始化演示数据
+-- 特点：全程幂等、可重复执行
+--   1) 所有 CREATE DATABASE / CREATE TABLE 均使用 IF NOT EXISTS；
+--   2) 老库缺失的列 / 索引 / 外键通过 information_schema 检查后自动补齐；
+--   3) 演示数据按"先清理本种子数据、再重新插入"的方式重置，多次执行结果一致。
+-- 数据库默认名为 exam_system（可在 .env 的 DATABASE_URL 中修改，
+--     FastAPI 启动时会按配置的库名自动建库）。
+-- 所有演示账号登录密码均为：Password123!
+-- ============================================================================
 
 SET NAMES utf8mb4;
+
+-- ----------------------------------------------------------------------------
+-- 1. 创建数据库
+-- ----------------------------------------------------------------------------
 CREATE DATABASE IF NOT EXISTS exam_system
     CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE exam_system;
 
--- 通用密码哈希（Password123!），与现有 seed 保持一致
+-- ----------------------------------------------------------------------------
+-- 2. 创建全部数据表（11 张，均 IF NOT EXISTS，顺序满足外键依赖）
+-- ----------------------------------------------------------------------------
+
+-- 2.1 班级
+CREATE TABLE IF NOT EXISTS classes (
+    id INT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    grade VARCHAR(50) NULL,
+    description TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.2 用户（学生 / 教师 / 管理员）
+CREATE TABLE IF NOT EXISTS users (
+    id INT NOT NULL AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role ENUM('student', 'teacher', 'admin') NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NULL,
+    phone VARCHAR(20) NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    class_id INT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_users_username (username),
+    KEY idx_users_role (role),
+    KEY ix_users_class_id (class_id),
+    CONSTRAINT fk_users_class_id FOREIGN KEY (class_id) REFERENCES classes (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.3 课程
+CREATE TABLE IF NOT EXISTS courses (
+    id INT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    description TEXT NULL,
+    teacher_id INT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_courses_teacher (teacher_id),
+    CONSTRAINT fk_courses_teacher FOREIGN KEY (teacher_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.4 教师-科目（课程）关联
+CREATE TABLE IF NOT EXISTS teacher_subjects (
+    id INT NOT NULL AUTO_INCREMENT,
+    teacher_id INT NOT NULL,
+    subject_id INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY ix_teacher_subjects_teacher_id (teacher_id),
+    KEY ix_teacher_subjects_subject_id (subject_id),
+    UNIQUE KEY uk_teacher_subject (teacher_id, subject_id),
+    CONSTRAINT fk_teacher_subjects_teacher
+        FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_teacher_subjects_subject
+        FOREIGN KEY (subject_id) REFERENCES courses(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.5 考试
+CREATE TABLE IF NOT EXISTS exams (
+    id INT NOT NULL AUTO_INCREMENT,
+    course_id INT NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT NULL,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
+    duration INT NOT NULL,
+    total_score INT NOT NULL DEFAULT 100,
+    pass_score INT NOT NULL DEFAULT 60,
+    random_order BOOLEAN DEFAULT TRUE,
+    max_switch INT DEFAULT 3,
+    status ENUM('draft', 'published', 'ongoing', 'finished') DEFAULT 'draft',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_exams_course (course_id),
+    KEY idx_exams_status (status),
+    CONSTRAINT fk_exams_course FOREIGN KEY (course_id) REFERENCES courses (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.6 题目（含简答题 AI 评分要点 grading_rubric）
+CREATE TABLE IF NOT EXISTS questions (
+    id INT NOT NULL AUTO_INCREMENT,
+    exam_id INT NOT NULL,
+    type ENUM('single', 'multiple', 'judge', 'blank', 'essay') NOT NULL,
+    content TEXT NOT NULL,
+    options TEXT NULL,
+    answer TEXT NULL,
+    score INT NOT NULL DEFAULT 1,
+    sort_order INT DEFAULT 0,
+    analysis TEXT NULL,
+    grading_rubric JSON NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_questions_exam (exam_id),
+    KEY idx_questions_type (type),
+    CONSTRAINT fk_questions_exam FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.7 考试记录
+CREATE TABLE IF NOT EXISTS exam_records (
+    id INT NOT NULL AUTO_INCREMENT,
+    student_id INT NOT NULL,
+    exam_id INT NOT NULL,
+    start_time DATETIME NOT NULL,
+    submit_time DATETIME NULL,
+    score INT DEFAULT 0,
+    status ENUM('ongoing', 'submitted', 'graded') DEFAULT 'ongoing',
+    switch_count INT DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_student_exam (student_id, exam_id),
+    KEY idx_records_student (student_id),
+    KEY idx_records_exam (exam_id),
+    CONSTRAINT fk_records_student FOREIGN KEY (student_id) REFERENCES users (id),
+    CONSTRAINT fk_records_exam FOREIGN KEY (exam_id) REFERENCES exams (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.8 答题记录（含 AI 评分字段）
+CREATE TABLE IF NOT EXISTS answers (
+    id INT NOT NULL AUTO_INCREMENT,
+    record_id INT NOT NULL,
+    question_id INT NOT NULL,
+    student_answer TEXT NULL,
+    score INT DEFAULT 0,
+    is_correct BOOLEAN NULL,
+    graded_at DATETIME NULL,
+    grader_id INT NULL,
+    ai_score INT NULL,
+    ai_feedback JSON NULL,
+    ai_model VARCHAR(128) NULL,
+    ai_graded_at DATETIME(6) NULL,
+    grading_source ENUM('pending', 'ai', 'teacher', 'failed') NOT NULL DEFAULT 'pending',
+    override_reason TEXT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_record_question (record_id, question_id),
+    KEY idx_answers_record (record_id),
+    KEY idx_answers_question (question_id),
+    CONSTRAINT fk_answers_record FOREIGN KEY (record_id) REFERENCES exam_records (id) ON DELETE CASCADE,
+    CONSTRAINT fk_answers_question FOREIGN KEY (question_id) REFERENCES questions (id),
+    CONSTRAINT fk_answers_grader FOREIGN KEY (grader_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.9 考试-班级关联
+CREATE TABLE IF NOT EXISTS exam_classes (
+    id INT NOT NULL AUTO_INCREMENT,
+    exam_id INT NOT NULL,
+    class_id INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY ix_exam_classes_exam_id (exam_id),
+    KEY ix_exam_classes_class_id (class_id),
+    UNIQUE KEY uk_exam_class (exam_id, class_id),
+    CONSTRAINT fk_exam_classes_exam
+        FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+    CONSTRAINT fk_exam_classes_class
+        FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.10 考试-学生关联（班级范围外单独添加 / 排除）
+CREATE TABLE IF NOT EXISTS exam_students (
+    id INT NOT NULL AUTO_INCREMENT,
+    exam_id INT NOT NULL,
+    student_id INT NOT NULL,
+    action VARCHAR(20) NOT NULL COMMENT 'include=额外添加, exclude=排除',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY ix_exam_students_exam_id (exam_id),
+    KEY ix_exam_students_student_id (student_id),
+    UNIQUE KEY uk_exam_student (exam_id, student_id),
+    CONSTRAINT fk_exam_students_exam
+        FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+    CONSTRAINT fk_exam_students_student
+        FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.11 AI 评分任务队列
+CREATE TABLE IF NOT EXISTS ai_grading_tasks (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    answer_id INT NOT NULL,
+    status ENUM('pending','processing','completed','failed') NOT NULL DEFAULT 'pending',
+    attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+    max_attempts INT UNSIGNED NOT NULL DEFAULT 3,
+    available_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    locked_at DATETIME(6) NULL,
+    locked_by VARCHAR(128) NULL,
+    completed_at DATETIME(6) NULL,
+    last_error TEXT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_ai_grading_tasks_answer_id (answer_id),
+    KEY ix_ai_grading_tasks_status_available_at (status, available_at),
+    CONSTRAINT fk_ai_grading_tasks_answer
+        FOREIGN KEY (answer_id) REFERENCES answers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- 3. 老库兼容：缺失列 / 索引 / 外键自动补齐（全新安装时全部为无操作）
+--    每个变更先查 information_schema，存在则跳过，可安全重复执行。
+-- ----------------------------------------------------------------------------
+
+-- 3.1 users.class_id 列
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'class_id') = 0,
+    'ALTER TABLE users ADD COLUMN class_id INT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.2 users.class_id 索引
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'ix_users_class_id') = 0,
+    'CREATE INDEX ix_users_class_id ON users (class_id)',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.3 users.class_id 外键
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
+       AND CONSTRAINT_NAME = 'fk_users_class_id') = 0,
+    'ALTER TABLE users ADD CONSTRAINT fk_users_class_id FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.4 questions.grading_rubric 列
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'questions' AND COLUMN_NAME = 'grading_rubric') = 0,
+    'ALTER TABLE questions ADD COLUMN grading_rubric JSON NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.5 answers.ai_score 列
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answers' AND COLUMN_NAME = 'ai_score') = 0,
+    'ALTER TABLE answers ADD COLUMN ai_score INT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.6 answers.ai_feedback 列
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answers' AND COLUMN_NAME = 'ai_feedback') = 0,
+    'ALTER TABLE answers ADD COLUMN ai_feedback JSON NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.7 answers.ai_model 列
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answers' AND COLUMN_NAME = 'ai_model') = 0,
+    'ALTER TABLE answers ADD COLUMN ai_model VARCHAR(128) NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.8 answers.ai_graded_at 列
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answers' AND COLUMN_NAME = 'ai_graded_at') = 0,
+    'ALTER TABLE answers ADD COLUMN ai_graded_at DATETIME(6) NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.9 answers.grading_source 列
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answers' AND COLUMN_NAME = 'grading_source') = 0,
+    'ALTER TABLE answers ADD COLUMN grading_source ENUM(''pending'',''ai'',''teacher'',''failed'') NOT NULL DEFAULT ''pending''',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.10 answers.override_reason 列
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answers' AND COLUMN_NAME = 'override_reason') = 0,
+    'ALTER TABLE answers ADD COLUMN override_reason TEXT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.11 历史人工评分的答案补齐来源标记
+UPDATE answers
+SET grading_source = 'teacher'
+WHERE grader_id IS NOT NULL AND grading_source = 'pending';
+
+-- ==== 演示数据（SEED） ====
+
+-- ----------------------------------------------------------------------------
+-- 4. 演示数据（可重复执行：先清理本种子数据再重新插入，结果一致）
+-- ----------------------------------------------------------------------------
+
+-- 4.1 计算机专业演示数据（小数据集：5 个账号 / 1 门课程 / 3 场考试）
+START TRANSACTION;
+
+-- Remove only this seed set, in foreign-key order.
+DELETE a FROM answers a
+JOIN exam_records r ON r.id = a.record_id
+JOIN exams e ON e.id = r.exam_id
+JOIN courses c ON c.id = e.course_id
+JOIN users t ON t.id = c.teacher_id
+WHERE t.username = 'seed_computer_teacher'
+  AND e.title IN ('计算机网络原理综合测试', 'Python程序设计基础练习', 'Java面向对象程序设计结课考试');
+
+DELETE r FROM exam_records r
+JOIN exams e ON e.id = r.exam_id
+JOIN courses c ON c.id = e.course_id
+JOIN users t ON t.id = c.teacher_id
+WHERE t.username = 'seed_computer_teacher'
+  AND e.title IN ('计算机网络原理综合测试', 'Python程序设计基础练习', 'Java面向对象程序设计结课考试');
+
+DELETE q FROM questions q
+JOIN exams e ON e.id = q.exam_id
+JOIN courses c ON c.id = e.course_id
+JOIN users t ON t.id = c.teacher_id
+WHERE t.username = 'seed_computer_teacher'
+  AND e.title IN ('计算机网络原理综合测试', 'Python程序设计基础练习', 'Java面向对象程序设计结课考试');
+
+DELETE e FROM exams e
+JOIN courses c ON c.id = e.course_id
+JOIN users t ON t.id = c.teacher_id
+WHERE t.username = 'seed_computer_teacher'
+  AND e.title IN ('计算机网络原理综合测试', 'Python程序设计基础练习', 'Java面向对象程序设计结课考试');
+
+DELETE c FROM courses c JOIN users t ON t.id = c.teacher_id
+WHERE t.username = 'seed_computer_teacher' AND c.name = '计算机科学与编程实践';
+
+DELETE FROM users WHERE username IN (
+    'seed_computer_admin', 'seed_computer_teacher',
+    'seed_computer_student_01', 'seed_computer_student_02', 'seed_computer_student_03'
+);
+
+-- All seeded users use Password123!.
+INSERT INTO users (username, password_hash, role, name, email, phone, is_active) VALUES
+('seed_computer_admin', '$2b$12$TKS7VJHhwGcT/fBCherTX.TNf/X4M26QTNqmTP8VQ8jG9TtYIUWIO', 'admin', '计算机考试系统管理员', 'seed_computer_admin@example.com', '13800002001', 1),
+('seed_computer_teacher', '$2b$12$TKS7VJHhwGcT/fBCherTX.TNf/X4M26QTNqmTP8VQ8jG9TtYIUWIO', 'teacher', '张老师', 'seed_computer_teacher@example.com', '13800002002', 1),
+('seed_computer_student_01', '$2b$12$TKS7VJHhwGcT/fBCherTX.TNf/X4M26QTNqmTP8VQ8jG9TtYIUWIO', 'student', '李明', 'seed_computer_student_01@example.com', '13800002011', 1),
+('seed_computer_student_02', '$2b$12$TKS7VJHhwGcT/fBCherTX.TNf/X4M26QTNqmTP8VQ8jG9TtYIUWIO', 'student', '王芳', 'seed_computer_student_02@example.com', '13800002012', 1),
+('seed_computer_student_03', '$2b$12$TKS7VJHhwGcT/fBCherTX.TNf/X4M26QTNqmTP8VQ8jG9TtYIUWIO', 'student', '赵磊', 'seed_computer_student_03@example.com', '13800002013', 1);
+
+SET @seed_teacher_id = (SELECT id FROM users WHERE username = 'seed_computer_teacher');
+INSERT INTO courses (name, description, teacher_id) VALUES
+('计算机科学与编程实践', '覆盖计算机网络、Python程序设计和Java面向对象编程的综合测试课程。', @seed_teacher_id);
+SET @seed_course_id = (SELECT id FROM courses WHERE teacher_id = @seed_teacher_id AND name = '计算机科学与编程实践');
+SET @seed_now = NOW();
+
+INSERT INTO exams (course_id, title, description, start_time, end_time, duration, total_score, pass_score, random_order, max_switch, status) VALUES
+(@seed_course_id, '计算机网络原理综合测试', '覆盖OSI模型、TCP/IP协议、子网划分和网络安全基础。', DATE_SUB(@seed_now, INTERVAL 1 HOUR), DATE_ADD(@seed_now, INTERVAL 7 DAY), 45, 100, 60, 0, 3, 'published'),
+(@seed_course_id, 'Python程序设计基础练习', '草稿考试，用于测试教师端题目编辑和考试配置流程。', DATE_ADD(@seed_now, INTERVAL 7 DAY), DATE_ADD(@seed_now, INTERVAL 8 DAY), 30, 100, 60, 1, 2, 'draft'),
+(@seed_course_id, 'Java面向对象程序设计结课考试', '已结束考试，用于测试成绩列表、阅卷和成绩展示。', DATE_SUB(@seed_now, INTERVAL 14 DAY), DATE_SUB(@seed_now, INTERVAL 13 DAY), 60, 100, 60, 1, 3, 'finished');
+
+SET @published_exam_id = (SELECT id FROM exams WHERE course_id = @seed_course_id AND title = '计算机网络原理综合测试');
+SET @draft_exam_id = (SELECT id FROM exams WHERE course_id = @seed_course_id AND title = 'Python程序设计基础练习');
+SET @finished_exam_id = (SELECT id FROM exams WHERE course_id = @seed_course_id AND title = 'Java面向对象程序设计结课考试');
+
+-- Published exam: 8 questions, 100 points, all five supported question types.
+INSERT INTO questions (exam_id, type, content, options, answer, score, sort_order, analysis) VALUES
+(@published_exam_id, 'single', '在TCP/IP模型中，负责端到端可靠传输的是哪一层？', '["网络接口层","网际层","传输层","应用层"]', 'C', 10, 1, '传输层通过TCP提供可靠、有序、面向连接的数据传输。'),
+(@published_exam_id, 'single', 'IPv4地址192.168.1.10属于哪一类私有地址？', '["A类","B类","C类","D类"]', 'C', 10, 2, '192.168.0.0/16是常见的C类私有地址网段。'),
+(@published_exam_id, 'multiple', '下列哪些协议属于应用层协议？', '["HTTP","DNS","FTP","TCP"]', 'ABC', 15, 3, 'HTTP、DNS和FTP位于应用层，TCP位于传输层。'),
+(@published_exam_id, 'multiple', '下列哪些措施可以提高网络通信安全性？', '["使用HTTPS","启用防火墙","定期更新补丁","共享管理员密码"]', 'ABC', 15, 4, '加密传输、边界防护和及时修复漏洞都是基础安全措施。'),
+(@published_exam_id, 'judge', 'TCP通过三次握手建立连接。', NULL, '正确', 10, 5, 'TCP连接建立过程包含SYN、SYN-ACK和ACK三个步骤。'),
+(@published_exam_id, 'judge', 'UDP协议能够保证数据一定按顺序到达。', NULL, '错误', 10, 6, 'UDP不提供连接、可靠性和顺序保证。'),
+(@published_exam_id, 'blank', 'Python中用于定义函数的关键字是____。', NULL, 'def', 10, 7, 'Python使用def关键字声明函数。'),
+(@published_exam_id, 'essay', '简述从浏览器输入URL到页面显示的主要网络过程。', NULL, '浏览器解析URL，查询DNS获得服务器IP，建立TCP连接并在HTTPS场景完成TLS握手，发送HTTP请求，服务器返回响应，浏览器解析HTML、CSS和JavaScript并渲染页面。', 20, 8, '答案应覆盖DNS、TCP/TLS、HTTP请求响应以及浏览器渲染。');
+
+-- Draft exam questions for teacher-side editing tests.
+INSERT INTO questions (exam_id, type, content, options, answer, score, sort_order, analysis) VALUES
+(@draft_exam_id, 'single', 'Python列表的下标默认从几开始？', '["0","1","-1","由列表长度决定"]', 'A', 20, 1, 'Python序列采用从0开始的索引。'),
+(@draft_exam_id, 'multiple', '下列哪些是Java的面向对象特征？', '["封装","继承","多态","指针算术"]', 'ABC', 40, 2, '封装、继承和多态是面向对象程序设计的核心特征。'),
+(@draft_exam_id, 'essay', '比较Python和Java在类型系统与运行方式上的主要差异。', NULL, 'Python通常采用动态类型并由解释器执行，Java是静态类型语言，源代码编译为字节码后运行在JVM上。', 40, 3, '考查两种语言的类型检查和执行模型。');
+
+-- Finished exam questions used by submitted and graded records.
+INSERT INTO questions (exam_id, type, content, options, answer, score, sort_order, analysis) VALUES
+(@finished_exam_id, 'single', 'Java中用于创建对象的关键字是？', '["class","new","this","extends"]', 'B', 20, 1, 'new表达式用于实例化对象。'),
+(@finished_exam_id, 'multiple', '下列哪些属于Java集合框架中的常用接口？', '["List","Set","Map","Thread"]', 'ABC', 20, 2, 'List、Set和Map是Java集合框架的核心接口。'),
+(@finished_exam_id, 'judge', 'Java类可以通过extends关键字继承一个父类。', NULL, '正确', 20, 3, 'Java类支持单继承，使用extends声明父类。'),
+(@finished_exam_id, 'blank', 'Java程序的入口方法通常是____。', NULL, 'main', 20, 4, '标准入口方法为public static void main(String[] args)。'),
+(@finished_exam_id, 'essay', '说明面向对象设计中封装、继承和多态的含义。', NULL, '封装将数据和操作数据的方法组合并隐藏实现细节；继承让子类复用并扩展父类能力；多态允许同一接口在不同对象上表现出不同实现。', 20, 5, '完整答案应分别解释三个面向对象特征及其作用。');
+
+SET @student_01_id = (SELECT id FROM users WHERE username = 'seed_computer_student_01');
+SET @student_02_id = (SELECT id FROM users WHERE username = 'seed_computer_student_02');
+SET @student_03_id = (SELECT id FROM users WHERE username = 'seed_computer_student_03');
+
+-- Ongoing record for the published exam.
+INSERT INTO exam_records (student_id, exam_id, start_time, submit_time, score, status, switch_count) VALUES
+(@student_01_id, @published_exam_id, DATE_SUB(@seed_now, INTERVAL 20 MINUTE), NULL, 0, 'ongoing', 1);
+SET @ongoing_record_id = (SELECT id FROM exam_records WHERE student_id = @student_01_id AND exam_id = @published_exam_id);
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct)
+SELECT @ongoing_record_id, id, 'C', 10, 1 FROM questions WHERE exam_id = @published_exam_id AND sort_order = 1;
+
+-- Submitted record: objective questions scored, essay pending manual grading.
+INSERT INTO exam_records (student_id, exam_id, start_time, submit_time, score, status, switch_count) VALUES
+(@student_02_id, @finished_exam_id, DATE_SUB(@seed_now, INTERVAL 10 DAY), DATE_ADD(DATE_SUB(@seed_now, INTERVAL 10 DAY), INTERVAL 48 MINUTE), 80, 'submitted', 0);
+SET @submitted_record_id = (SELECT id FROM exam_records WHERE student_id = @student_02_id AND exam_id = @finished_exam_id);
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct) SELECT @submitted_record_id, id, 'B', 20, 1 FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 1;
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct) SELECT @submitted_record_id, id, 'ABC', 20, 1 FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 2;
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct) SELECT @submitted_record_id, id, '正确', 20, 1 FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 3;
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct) SELECT @submitted_record_id, id, 'main', 20, 1 FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 4;
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct) SELECT @submitted_record_id, id, '封装和继承可以复用代码。', 0, NULL FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 5;
+
+-- Graded record: the essay has teacher metadata and partial credit.
+INSERT INTO exam_records (student_id, exam_id, start_time, submit_time, score, status, switch_count) VALUES
+(@student_03_id, @finished_exam_id, DATE_SUB(@seed_now, INTERVAL 11 DAY), DATE_ADD(DATE_SUB(@seed_now, INTERVAL 11 DAY), INTERVAL 52 MINUTE), 92, 'graded', 2);
+SET @graded_record_id = (SELECT id FROM exam_records WHERE student_id = @student_03_id AND exam_id = @finished_exam_id);
+SET @grader_id = @seed_teacher_id;
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct, graded_at, grader_id) SELECT @graded_record_id, id, 'B', 20, 1, DATE_SUB(@seed_now, INTERVAL 10 DAY), @grader_id FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 1;
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct, graded_at, grader_id) SELECT @graded_record_id, id, 'ABC', 20, 1, DATE_SUB(@seed_now, INTERVAL 10 DAY), @grader_id FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 2;
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct, graded_at, grader_id) SELECT @graded_record_id, id, '正确', 20, 1, DATE_SUB(@seed_now, INTERVAL 10 DAY), @grader_id FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 3;
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct, graded_at, grader_id) SELECT @graded_record_id, id, 'main', 20, 1, DATE_SUB(@seed_now, INTERVAL 10 DAY), @grader_id FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 4;
+INSERT INTO answers (record_id, question_id, student_answer, score, is_correct, graded_at, grader_id) SELECT @graded_record_id, id, '封装隐藏数据，继承复用父类，多态让同一接口有不同实现。', 12, NULL, DATE_SUB(@seed_now, INTERVAL 10 DAY), @grader_id FROM questions WHERE exam_id = @finished_exam_id AND sort_order = 5;
+
+COMMIT;
+
+-- 4.2 大型演示数据（60 学生 / 6 教师 / 5 班级 / 8 课程 / 10 场考试 / 约 2500 条答题记录）
 SET @pw = '$2b$12$TKS7VJHhwGcT/fBCherTX.TNf/X4M26QTNqmTP8VQ8jG9TtYIUWIO';
 
 START TRANSACTION;
@@ -472,18 +932,3 @@ SET r.score = (SELECT COALESCE(SUM(a.score), 0) FROM answers a WHERE a.record_id
 WHERE t.username LIKE 'demo_teacher%' AND r.status IN ('submitted', 'graded');
 
 COMMIT;
-
--- =====================================================================
--- 11. 数据校验（查看各表 demo 数据量）
--- =====================================================================
-SELECT 'users' AS tbl, COUNT(*) AS cnt FROM users WHERE username LIKE 'demo_%'
-UNION ALL SELECT 'classes', COUNT(*) FROM classes WHERE name IN ('计科2401班', '计科2402班', '计科2403班', '软件2401班', '软件2402班')
-UNION ALL SELECT 'courses', COUNT(*) FROM courses c JOIN users t ON t.id = c.teacher_id WHERE t.username LIKE 'demo_teacher%'
-UNION ALL SELECT 'exams', COUNT(*) FROM exams e JOIN courses c ON c.id = e.course_id JOIN users t ON t.id = c.teacher_id WHERE t.username LIKE 'demo_teacher%'
-UNION ALL SELECT 'questions', COUNT(*) FROM questions q JOIN exams e ON e.id = q.exam_id JOIN courses c ON c.id = e.course_id JOIN users t ON t.id = c.teacher_id WHERE t.username LIKE 'demo_teacher%'
-UNION ALL SELECT 'exam_records', COUNT(*) FROM exam_records r JOIN exams e ON e.id = r.exam_id JOIN courses c ON c.id = e.course_id JOIN users t ON t.id = c.teacher_id WHERE t.username LIKE 'demo_teacher%'
-UNION ALL SELECT 'answers', COUNT(*) FROM answers a JOIN exam_records r ON r.id = a.record_id JOIN exams e ON e.id = r.exam_id JOIN courses c ON c.id = e.course_id JOIN users t ON t.id = c.teacher_id WHERE t.username LIKE 'demo_teacher%'
-UNION ALL SELECT 'ai_graded_answers', COUNT(*) FROM answers a JOIN exam_records r ON r.id = a.record_id JOIN exams e ON e.id = r.exam_id JOIN courses c ON c.id = e.course_id JOIN users t ON t.id = c.teacher_id WHERE t.username LIKE 'demo_teacher%' AND a.grading_source = 'ai';
-
--- Seeded accounts (all with password Password123!):
--- demo_admin / demo_teacher_01..06 / demo_student_01..demo_student_60

@@ -14,7 +14,7 @@
 | 考试作答链路 | ExamTakingUser | 拿试卷 → 保存答案(Redis) → 交卷，每账号单轮 |
 | 教师阅卷页并发 | TeacherGradingUser | 考试列表 → 阅卷列表 → 答卷详情 |
 
-数据基础：`seed_large_demo_data.sql`（60 学生 + 6 教师 + 1 管理员 + 10 场考试）。
+数据基础：`init.sql` 中的大型演示数据（60 学生 + 6 教师 + 1 管理员 + 10 场考试）。
 
 ## 2. 压测发现并修复的问题
 
@@ -74,7 +74,7 @@
 
 ## 5. 复现方式
 
-前置条件：后端（8000）+ Redis 运行中，`seed_large_demo_data.sql` 已灌入（作答链路压测后需重跑恢复 ongoing 记录）。
+前置条件：后端（8000）+ Redis 运行中，`init.sql` 已灌入（作答链路压测后需重跑恢复 ongoing 记录）。
 
 ```bash
 # 交互模式（Web UI http://localhost:8089）

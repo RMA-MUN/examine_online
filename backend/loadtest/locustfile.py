@@ -12,7 +12,7 @@
   uv run locust -f backend/loadtest/locustfile.py --host http://localhost:8000 \
       --headless --users 300 --spawn-rate 50 --run-time 3m --only-user LoginUser --csv=report
 
-前置条件：后端(8000)与 Redis 运行中、seed_large_demo_data.sql 已灌入；
+前置条件：后端(8000)与 Redis 运行中、init.sql 已灌入（含大型演示数据）；
 作答链路压测会消耗 ongoing 考试记录（共 60 条），压测后需重跑 seed 恢复。
 """
 
