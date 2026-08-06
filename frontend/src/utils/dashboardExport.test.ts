@@ -2,22 +2,22 @@ import type { AxiosResponse } from 'axios';
 import { downloadDashboardFile } from './dashboardExport';
 
 describe('downloadDashboardFile', () => {
-  let createObjectURL: jest.SpyInstance;
-  let revokeObjectURL: jest.SpyInstance;
-  let click: jest.SpyInstance;
-  let appendChild: jest.SpyInstance;
+  let createObjectURL: ReturnType<typeof vi.spyOn>;
+  let revokeObjectURL: ReturnType<typeof vi.spyOn>;
+  let click: ReturnType<typeof vi.spyOn>;
+  let appendChild: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    window.URL.createObjectURL = jest.fn(() => 'blob:test');
-    window.URL.revokeObjectURL = jest.fn();
-    createObjectURL = jest.spyOn(window.URL, 'createObjectURL');
-    revokeObjectURL = jest.spyOn(window.URL, 'revokeObjectURL');
-    click = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
-    appendChild = jest.spyOn(document.body, 'appendChild');
+    window.URL.createObjectURL = vi.fn(() => 'blob:test');
+    window.URL.revokeObjectURL = vi.fn();
+    createObjectURL = vi.spyOn(window.URL, 'createObjectURL');
+    revokeObjectURL = vi.spyOn(window.URL, 'revokeObjectURL');
+    click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    appendChild = vi.spyOn(document.body, 'appendChild');
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
     document.querySelectorAll('a[download]').forEach((anchor) => anchor.remove());
   });
 

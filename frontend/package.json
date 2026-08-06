@@ -2,6 +2,7 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "@ant-design/icons": "^6.3.2",
     "@testing-library/dom": "^10.4.1",
@@ -11,36 +12,21 @@
     "antd": "^6.5.3",
     "axios": "^1.19.0",
     "dayjs": "^1.11.21",
-    "echarts": "^5.6.0",
+    "echarts": "^6.1.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
-    "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4",
     "zustand": "^5.0.14"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "jest": {
-    "transformIgnorePatterns": [
-      "node_modules/(?!(@ant-design|@rc-component|react-router|react-router-dom|antd|@babel/runtime|dayjs)/)"
-    ],
-    "moduleNameMapper": {
-      "^react-router/dom$": "<rootDir>/node_modules/react-router/dist/development/dom-export.js",
-      "^@rc-component/pagination/locale/(.*)$": "<rootDir>/node_modules/@rc-component/pagination/lib/locale/$1",
-      "^@rc-component/picker/locale/(.*)$": "<rootDir>/node_modules/@rc-component/picker/lib/locale/$1",
-      "^@rc-component/picker/generate/dayjs$": "<rootDir>/node_modules/@rc-component/picker/lib/generate/dayjs.js"
-    }
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "browserslist": {
     "production": [
@@ -55,10 +41,16 @@
     ]
   },
   "devDependencies": {
-    "@types/jest": "^27.5.2",
     "@types/node": "^26.1.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
-    "tailwindcss": "^3.4.19"
+    "@vitejs/plugin-react": "^6.0.5",
+    "autoprefixer": "^10.5.4",
+    "jsdom": "^30.0.1",
+    "postcss": "^8.5.25",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   }
 }

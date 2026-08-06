@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { App } from 'antd';
@@ -44,10 +45,10 @@ const answers: Answer[] = [
 ];
 
 beforeEach(() => {
-  jest.spyOn(examsApi, 'getMyRecords').mockResolvedValue({
+  vi.spyOn(examsApi, 'getMyRecords').mockResolvedValue({
     code: 200, message: 'success', data: records,
   } as never);
-  jest.spyOn(gradingApi, 'getMyRecordAnswers').mockResolvedValue({
+  vi.spyOn(gradingApi, 'getMyRecordAnswers').mockResolvedValue({
     code: 200, message: 'success', data: answers,
   } as never);
 });
@@ -73,7 +74,7 @@ const wrongBlankAnswer: Answer = {
 };
 
 test('判错的填空题在结果详情中展示 AI 评分依据', async () => {
-  (gradingApi.getMyRecordAnswers as jest.Mock).mockResolvedValueOnce({
+  (gradingApi.getMyRecordAnswers as Mock).mockResolvedValueOnce({
     code: 200,
     message: 'success',
     data: [wrongBlankAnswer],
@@ -126,7 +127,7 @@ test('切换考试记录时详情抽屉的滚动位置被重置', async () => {
     created_at: '2026-08-04 09:00:00',
     exam_title: '期末考试',
   };
-  (examsApi.getMyRecords as jest.Mock).mockResolvedValueOnce({
+  (examsApi.getMyRecords as Mock).mockResolvedValueOnce({
     code: 200,
     message: 'success',
     data: [records[0], secondRecord],
@@ -141,7 +142,7 @@ test('切换考试记录时详情抽屉的滚动位置被重置', async () => {
       question: { type: 'essay', content: '简述二', score: 10, answer: '要点D' },
     },
   ];
-  (gradingApi.getMyRecordAnswers as jest.Mock)
+  (gradingApi.getMyRecordAnswers as Mock)
     .mockResolvedValueOnce({ code: 200, message: 'success', data: answers } as never)
     .mockResolvedValueOnce({ code: 200, message: 'success', data: secondAnswers } as never);
 

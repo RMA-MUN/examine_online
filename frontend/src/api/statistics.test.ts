@@ -1,16 +1,17 @@
+import type { Mock, MockedFunction } from 'vitest';
 import axios from './axios';
 import { exportDashboard } from './statistics';
 
-jest.mock('./axios', () => ({
+vi.mock('./axios', () => ({
   __esModule: true,
-  default: { get: jest.fn() },
+  default: { get: vi.fn() },
 }));
 
-const mockGet = axios.get as jest.Mock;
+const mockGet = axios.get as Mock;
 
 describe('exportDashboard', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('requests the CSV summary and preserves the binary response headers', async () => {

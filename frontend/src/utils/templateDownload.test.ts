@@ -1,26 +1,27 @@
+import type { Mock, MockedFunction } from 'vitest';
 import { downloadTemplateFile } from './templateDownload';
 import { downloadTemplate } from '../api/exams';
 
-jest.mock('../api/exams', () => ({
-  downloadTemplate: jest.fn(),
+vi.mock('../api/exams', () => ({
+  downloadTemplate: vi.fn(),
 }));
 
-const mockDownloadTemplate = downloadTemplate as jest.Mock;
+const mockDownloadTemplate = downloadTemplate as Mock;
 
 describe('downloadTemplateFile', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    window.URL.createObjectURL = jest.fn(() => 'blob:mock');
-    window.URL.revokeObjectURL = jest.fn();
+    vi.clearAllMocks();
+    window.URL.createObjectURL = vi.fn(() => 'blob:mock');
+    window.URL.revokeObjectURL = vi.fn();
     document.body.innerHTML = '';
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('下载 excel 模板且文件名为 .xlsx', async () => {
-    const appendSpy = jest.spyOn(document.body, 'appendChild');
+    const appendSpy = vi.spyOn(document.body, 'appendChild');
     mockDownloadTemplate.mockResolvedValue(new Blob(['x']));
 
     await downloadTemplateFile('excel');
@@ -32,7 +33,7 @@ describe('downloadTemplateFile', () => {
   });
 
   it('下载 word 模板且文件名为 .docx', async () => {
-    const appendSpy = jest.spyOn(document.body, 'appendChild');
+    const appendSpy = vi.spyOn(document.body, 'appendChild');
     mockDownloadTemplate.mockResolvedValue(new Blob(['x']));
 
     await downloadTemplateFile('word');

@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 根容器占满视口：页面滚动交给各区域内部，避免整体页面滚动 */
+html,
+body,
+#root {
+  height: 100%;
+}
+
 :root {
   --color-primary: #3D5A80;
   --color-primary-hover: #4A6B94;

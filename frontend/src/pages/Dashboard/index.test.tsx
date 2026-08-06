@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction } from 'vitest';
 import { App } from 'antd';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -11,30 +12,30 @@ import type {
   TeacherDashboardData,
 } from '../../types/dashboard';
 
-jest.mock('../../api/statistics', () => ({
-  exportDashboard: jest.fn(),
-  getDashboard: jest.fn(),
+vi.mock('../../api/statistics', () => ({
+  exportDashboard: vi.fn(),
+  getDashboard: vi.fn(),
 }));
 
-jest.mock('../../utils/dashboardExport', () => ({
-  downloadDashboardFile: jest.fn(),
+vi.mock('../../utils/dashboardExport', () => ({
+  downloadDashboardFile: vi.fn(),
 }));
 
-jest.mock('../../components/EChart', () => ({
+vi.mock('../../components/EChart', () => ({
   __esModule: true,
   default: ({ ariaLabel }: { ariaLabel: string }) => (
     <div role="img" aria-label={ariaLabel} />
   ),
 }));
 
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => jest.fn(),
-}));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => vi.fn() };
+});
 
-const mockGetDashboard = getDashboard as jest.Mock;
-const mockExportDashboard = exportDashboard as jest.Mock;
-const mockDownloadDashboardFile = downloadDashboardFile as jest.Mock;
+const mockGetDashboard = getDashboard as Mock;
+const mockExportDashboard = exportDashboard as Mock;
+const mockDownloadDashboardFile = downloadDashboardFile as Mock;
 
 const studentData: StudentDashboardData = {
   role: 'student',
@@ -103,7 +104,7 @@ const renderDashboard = (data: StudentDashboardData | TeacherDashboardData | Adm
 
 describe('Dashboard', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockExportDashboard.mockResolvedValue({ data: new Blob(['file']), headers: {} });
   });
 
@@ -184,7 +185,7 @@ describe('Dashboard', () => {
   });
 
   it('shows an error and restores the export button when download fails', async () => {
-    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mockExportDashboard.mockRejectedValue(new Error('network error'));
     renderDashboard(adminData);
 

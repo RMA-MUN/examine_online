@@ -1,19 +1,20 @@
+import type { Mock, MockedFunction } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Login from './index';
 import { login } from '../../api/auth';
 import useAuthStore from '../../store/auth';
 
-jest.mock('../../api/auth', () => ({ login: jest.fn() }));
+vi.mock('../../api/auth', () => ({ login: vi.fn() }));
 
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => jest.fn(),
-}));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => vi.fn() };
+});
 
-jest.mock('../../store/auth', () => () => ({ setToken: jest.fn() }));
+vi.mock('../../store/auth', () => ({ default: () => ({ setToken: vi.fn() }) }));
 
-const mockLogin = login as jest.Mock;
+const mockLogin = login as Mock;
 
 describe('Login', () => {
   beforeEach(() => {

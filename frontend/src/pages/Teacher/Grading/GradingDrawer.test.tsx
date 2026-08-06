@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { App } from 'antd';
@@ -49,7 +50,7 @@ const wrongBlank: Answer = {
 };
 
 beforeEach(() => {
-  jest.spyOn(gradingApi, 'getRecordAnswers').mockResolvedValue({
+  vi.spyOn(gradingApi, 'getRecordAnswers').mockResolvedValue({
     code: 200,
     message: 'success',
     data: [wrongBlank],
@@ -59,7 +60,7 @@ beforeEach(() => {
 test('判错的填空题展示 AI 评分依据', async () => {
   render(
     <App>
-      <GradingDrawer record={record} open onClose={jest.fn()} />
+      <GradingDrawer record={record} open onClose={vi.fn()} />
     </App>
   );
   await screen.findByText('我国首都是哪座城市？');
@@ -85,14 +86,14 @@ test('答对的填空题不展示 AI 评分依据', async () => {
       grading_source: 'pending',
     },
   };
-  (gradingApi.getRecordAnswers as jest.Mock).mockResolvedValueOnce({
+  (gradingApi.getRecordAnswers as Mock).mockResolvedValueOnce({
     code: 200,
     message: 'success',
     data: [correctBlank],
   } as never);
   render(
     <App>
-      <GradingDrawer record={record} open onClose={jest.fn()} />
+      <GradingDrawer record={record} open onClose={vi.fn()} />
     </App>
   );
   await screen.findByText('我国首都是哪座城市？');
@@ -113,14 +114,14 @@ test('客观题（单选题）不展示 AI 评分依据', async () => {
       grading_source: 'pending',
     },
   };
-  (gradingApi.getRecordAnswers as jest.Mock).mockResolvedValueOnce({
+  (gradingApi.getRecordAnswers as Mock).mockResolvedValueOnce({
     code: 200,
     message: 'success',
     data: [single],
   } as never);
   render(
     <App>
-      <GradingDrawer record={record} open onClose={jest.fn()} />
+      <GradingDrawer record={record} open onClose={vi.fn()} />
     </App>
   );
   await screen.findByText('1+1=？');

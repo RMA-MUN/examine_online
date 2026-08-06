@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ExamManage from './index';
@@ -5,18 +6,18 @@ import { getExams } from '../../../api/exams';
 import type { ApiResponse, Paginated } from '../../../types/api';
 import type { Exam } from '../../../types/exam';
 
-jest.mock('../../../api/exams', () => ({
-  getExams: jest.fn(),
-  deleteExam: jest.fn(),
-  publishExam: jest.fn(),
+vi.mock('../../../api/exams', () => ({
+  getExams: vi.fn(),
+  deleteExam: vi.fn(),
+  publishExam: vi.fn(),
 }));
 
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => jest.fn(),
-}));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => vi.fn() };
+});
 
-const mockGetExams = getExams as jest.Mock;
+const mockGetExams = getExams as Mock;
 
 const exam: Exam = {
   id: 1,

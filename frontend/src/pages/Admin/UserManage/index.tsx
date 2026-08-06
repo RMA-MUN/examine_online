@@ -27,13 +27,19 @@ const UserManage = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
   const [form] = Form.useForm<UserFormValues>();
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (p: number = 1, ps: number = 10) => {
     setLoading(true);
     try {
-      const res = await getUsers();
+      const res = await getUsers({ page: p, page_size: ps });
       setUsers(res.data.items || []);
+      setTotal(res.data.total || 0);
+      setPage(p);
+      setPageSize(ps);
     } catch (error) {
       message.error('获取用户列表失败');
     } finally {
@@ -145,6 +151,14 @@ const UserManage = () => {
           dataSource={users}
           loading={loading}
           rowKey="id"
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            showTotal: (t: number) => `共 ${t} 条`,
+            onChange: (p: number, ps: number) => fetchUsers(p, ps),
+          }}
           locale={{
             emptyText: (
               <EmptyState

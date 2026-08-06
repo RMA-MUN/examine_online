@@ -1,14 +1,15 @@
+import type { Mock, MockedFunction } from 'vitest';
 import { act, render } from '@testing-library/react';
 import * as echarts from 'echarts';
 import EChart from './index';
 
-jest.mock('echarts', () => ({ init: jest.fn() }));
+vi.mock('echarts', () => ({ init: vi.fn() }));
 
-const setOption = jest.fn();
-const resize = jest.fn();
-const dispose = jest.fn();
-const observe = jest.fn();
-const disconnect = jest.fn();
+const setOption = vi.fn();
+const resize = vi.fn();
+const dispose = vi.fn();
+const observe = vi.fn();
+const disconnect = vi.fn();
 let resizeCallback: ResizeObserverCallback;
 
 class ResizeObserverMock {
@@ -17,15 +18,15 @@ class ResizeObserverMock {
   }
 
   observe = observe;
-  unobserve = jest.fn();
+  unobserve = vi.fn();
   disconnect = disconnect;
 }
 
-const mockInit = echarts.init as jest.MockedFunction<typeof echarts.init>;
+const mockInit = echarts.init as MockedFunction<typeof echarts.init>;
 
 describe('EChart', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     window.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
     mockInit.mockReturnValue({ setOption, resize, dispose } as unknown as echarts.ECharts);
   });
