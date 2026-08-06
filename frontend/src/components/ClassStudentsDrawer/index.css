@@ -4,5 +4,7 @@
 
 .class-students-transfer .ant-transfer-list {
   flex: 1;
+  /* 两栏高度按视口自适应：抽屉内填满，滚动只发生在列表内部 */
+  height: calc(100dvh - 230px);
   min-height: 320px;
 }

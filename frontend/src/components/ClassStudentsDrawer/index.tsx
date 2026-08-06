@@ -108,7 +108,7 @@ const ClassStudentsDrawer = ({ open, onClose, classId, className, onChanged }: C
       title={className ? `管理班级学生：${className}` : '管理班级学生'}
       open={open}
       onClose={onClose}
-      width={560}
+      width={760}
     >
       <div className="class-students-transfer">
         <Transfer {...options} rowKey={(i) => i.key} />
