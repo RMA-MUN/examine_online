@@ -84,7 +84,7 @@ async def test_admin_build_aggregates_class_course_exam_summary():
             "min_score": 90,
         },
     ]
-    assert data["student_scores"] == [
+    assert data["student_detail"] == [
         {
             "student_name": "小明",
             "class_name": "计科2401班",
@@ -113,6 +113,15 @@ async def test_admin_build_aggregates_class_course_exam_summary():
             "status": "已阅卷",
         },
     ]
+    assert set(data["student_detail"][0].keys()) == {
+        "student_name",
+        "class_name",
+        "course_name",
+        "exam_title",
+        "score",
+        "pass_score",
+        "status",
+    }
 
 
 @pytest.mark.asyncio
@@ -132,7 +141,7 @@ async def test_build_marks_students_without_class():
     data = await build_score_export_data(db, SimpleNamespace(id=3, role="admin"))
 
     assert data["class_summary"][0]["class_name"] == "未分配班级"
-    assert data["student_scores"][0]["class_name"] == "未分配班级"
+    assert data["student_detail"][0]["class_name"] == "未分配班级"
 
 
 @pytest.mark.asyncio
@@ -155,7 +164,7 @@ async def test_teacher_build_filters_to_assigned_courses():
 
     data = await build_score_export_data(db, SimpleNamespace(id=2, role="teacher"))
 
-    assert [row["course_name"] for row in data["student_scores"]] == ["数学"]
+    assert [row["course_name"] for row in data["student_detail"]] == ["数学"]
 
 
 @pytest.mark.asyncio
@@ -189,20 +198,18 @@ async def test_build_filters_by_class_and_course():
         db, SimpleNamespace(id=3, role="admin"), class_id=1, course_id=1
     )
 
-    assert len(data["student_scores"]) == 1
-    assert data["student_scores"][0]["student_name"] == "小明"
+    assert len(data["student_detail"]) == 1
+    assert data["student_detail"][0]["student_name"] == "小明"
 
 
 @pytest.mark.asyncio
-async def test_build_question_details_with_sort_order_numbering():
+async def test_build_wide_detail_puts_question_scores_in_columns():
     class_a = SimpleNamespace(id=1, name="一班")
     math = SimpleNamespace(id=1, name="数学")
     exam = SimpleNamespace(id=1, course_id=1, title="期中考试", pass_score=60)
     student = SimpleNamespace(id=10, name="小明", class_id=1)
     record = make_record(1, 10, 1, 80, "graded")
-    q_second = SimpleNamespace(
-        id=2, exam_id=1, type="single", score=3, sort_order=2
-    )
+    q_second = SimpleNamespace(id=2, exam_id=1, type="single", score=3, sort_order=2)
     q_first = SimpleNamespace(id=1, exam_id=1, type="essay", score=5, sort_order=1)
     db = FakeSession(
         [
@@ -219,32 +226,23 @@ async def test_build_question_details_with_sort_order_numbering():
 
     data = await build_score_export_data(db, SimpleNamespace(id=3, role="admin"))
 
-    assert data["question_details"] == [
+    assert data["student_detail"] == [
         {
             "student_name": "小明",
             "class_name": "一班",
             "course_name": "数学",
             "exam_title": "期中考试",
-            "question_no": 1,
-            "question_type": "简答",
-            "score": 4,
-            "full_score": 5,
-        },
-        {
-            "student_name": "小明",
-            "class_name": "一班",
-            "course_name": "数学",
-            "exam_title": "期中考试",
-            "question_no": 2,
-            "question_type": "单选",
-            "score": 3,
-            "full_score": 3,
-        },
+            "score": 80,
+            "pass_score": 60,
+            "status": "已阅卷",
+            "q1": 4,
+            "q2": 3,
+        }
     ]
 
 
 @pytest.mark.asyncio
-async def test_build_question_details_numbers_by_full_question_list():
+async def test_build_wide_detail_numbers_by_full_question_list():
     class_a = SimpleNamespace(id=1, name="一班")
     math = SimpleNamespace(id=1, name="数学")
     exam = SimpleNamespace(id=1, course_id=1, title="期中考试", pass_score=60)
@@ -270,17 +268,77 @@ async def test_build_question_details_numbers_by_full_question_list():
 
     data = await build_score_export_data(db, SimpleNamespace(id=3, role="admin"))
 
-    assert data["question_details"] == [
+    assert data["student_detail"] == [
         {
             "student_name": "小明",
             "class_name": "一班",
             "course_name": "数学",
             "exam_title": "期中考试",
-            "question_no": 2,
-            "question_type": "单选",
-            "score": 3,
-            "full_score": 3,
+            "score": 80,
+            "pass_score": 60,
+            "status": "已阅卷",
+            "q1": None,
+            "q2": 3,
         }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_build_wide_detail_leaves_unanswered_and_missing_question_columns_empty():
+    class_a = SimpleNamespace(id=1, name="一班")
+    math = SimpleNamespace(id=1, name="数学")
+    english = SimpleNamespace(id=2, name="英语")
+    exam_math = SimpleNamespace(id=1, course_id=1, title="期中考试", pass_score=60)
+    exam_english = SimpleNamespace(id=2, course_id=2, title="期末考试", pass_score=70)
+    student = SimpleNamespace(id=10, name="小明", class_id=1)
+    record_math = make_record(1, 10, 1, 80, "graded")
+    record_english = make_record(2, 10, 2, 90, "graded")
+    q_math_1 = SimpleNamespace(id=1, exam_id=1, type="single", score=3, sort_order=1)
+    q_math_2 = SimpleNamespace(id=2, exam_id=1, type="essay", score=5, sort_order=2)
+    q_english_1 = SimpleNamespace(id=3, exam_id=2, type="single", score=3, sort_order=1)
+    db = FakeSession(
+        [
+            RowResult(
+                [
+                    (record_math, student, math, exam_math, class_a),
+                    (record_english, student, english, exam_english, class_a),
+                ]
+            ),
+            RowResult(
+                [
+                    (SimpleNamespace(id=11, record_id=1, question_id=2, score=4), q_math_2),
+                    (SimpleNamespace(id=12, record_id=2, question_id=3, score=2), q_english_1),
+                ]
+            ),
+            ScalarResult([q_math_1, q_math_2, q_english_1]),
+        ]
+    )
+
+    data = await build_score_export_data(db, SimpleNamespace(id=3, role="admin"))
+
+    assert data["student_detail"] == [
+        {
+            "student_name": "小明",
+            "class_name": "一班",
+            "course_name": "数学",
+            "exam_title": "期中考试",
+            "score": 80,
+            "pass_score": 60,
+            "status": "已阅卷",
+            "q1": None,
+            "q2": 4,
+        },
+        {
+            "student_name": "小明",
+            "class_name": "一班",
+            "course_name": "英语",
+            "exam_title": "期末考试",
+            "score": 90,
+            "pass_score": 70,
+            "status": "已阅卷",
+            "q1": 2,
+            "q2": None,
+        },
     ]
 
 
@@ -412,8 +470,7 @@ async def test_export_scores_endpoint_returns_streaming_response(monkeypatch):
         AsyncMock(
             return_value={
                 "class_summary": [],
-                "student_scores": [],
-                "question_details": [],
+                "student_detail": [],
             }
         ),
     )

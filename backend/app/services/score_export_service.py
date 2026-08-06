@@ -1,4 +1,4 @@
-"""成绩明细导出服务：按班级×科目×考试汇总成绩、学生总分与题目得分明细。"""
+"""成绩明细导出服务：按班级×科目×考试汇总成绩、学生明细宽表（每题一列）。"""
 
 from collections import defaultdict
 from io import BytesIO
@@ -26,7 +26,7 @@ CLASS_SUMMARY_COLUMNS = [
     "max_score",
     "min_score",
 ]
-STUDENT_SCORE_COLUMNS = [
+STUDENT_DETAIL_BASE_COLUMNS = [
     "student_name",
     "class_name",
     "course_name",
@@ -34,16 +34,6 @@ STUDENT_SCORE_COLUMNS = [
     "score",
     "pass_score",
     "status",
-]
-QUESTION_DETAIL_COLUMNS = [
-    "student_name",
-    "class_name",
-    "course_name",
-    "exam_title",
-    "question_no",
-    "question_type",
-    "score",
-    "full_score",
 ]
 
 # 导出文件表头的中英文映射，英文列名展示为中文
@@ -95,7 +85,7 @@ async def build_score_export_data(
     class_id: int | None = None,
     course_id: int | None = None,
 ) -> dict[str, list[dict]]:
-    """构建成绩导出数据集（班级成绩汇总/学生成绩/题目得分明细）。
+    """构建成绩导出数据集（班级成绩汇总/学生明细宽表）。
     :raises ScoreExportError: 教师请求越权科目
     """
     assigned = None
@@ -129,30 +119,23 @@ async def build_score_export_data(
     )
 
     grouped: dict[tuple, list[int]] = {}
-    student_scores = []
+    student_detail = []
     record_by_id = {}
     exam_ids: set[int] = set()
     for record, student, course, exam, school_class in rows:
         exam_ids.add(exam.id)
         class_name = class_name_of(school_class)
-        record_by_id[record.id] = (
-            student,
-            class_name,
-            course.name,
-            exam.title,
-            exam.pass_score,
-        )
-        student_scores.append(
-            {
-                "student_name": student.name,
-                "class_name": class_name,
-                "course_name": course.name,
-                "exam_title": exam.title,
-                "score": record.score,
-                "pass_score": exam.pass_score,
-                "status": _STATUS_TEXT.get(record.status, record.status),
-            }
-        )
+        row = {
+            "student_name": student.name,
+            "class_name": class_name,
+            "course_name": course.name,
+            "exam_title": exam.title,
+            "score": record.score,
+            "pass_score": exam.pass_score,
+            "status": _STATUS_TEXT.get(record.status, record.status),
+        }
+        record_by_id[record.id] = row
+        student_detail.append(row)
         key = (class_name, course.name, exam.id, exam.title, exam.pass_score)
         grouped.setdefault(key, []).append(record.score)
 
@@ -172,7 +155,7 @@ async def build_score_export_data(
             }
         )
 
-    question_details = []
+    max_questions = 0
     if record_by_id:
         answer_rows = (
             await db.execute(
@@ -183,7 +166,9 @@ async def build_score_export_data(
         ).all()
         if answer_rows:
             questions = (
-                await db.execute(select(Question).where(Question.exam_id.in_(exam_ids)))
+                await db.execute(
+                    select(Question).where(Question.exam_id.in_(exam_ids))
+                )
             ).scalars().all()
             questions_by_exam: dict[int, list] = defaultdict(list)
             for question in questions:
@@ -194,31 +179,19 @@ async def build_score_export_data(
                     sorted(exam_questions, key=lambda q: (q.sort_order, q.id)), start=1
                 ):
                     question_no[question.id] = idx
-            for answer, question in sorted(
-                answer_rows, key=lambda pair: (pair[1].sort_order, pair[1].id)
-            ):
-                student, class_name, course_name, exam_title, _ = record_by_id[
-                    answer.record_id
-                ]
-                question_details.append(
-                    {
-                        "student_name": student.name,
-                        "class_name": class_name,
-                        "course_name": course_name,
-                        "exam_title": exam_title,
-                        "question_no": question_no[question.id],
-                        "question_type": _QUESTION_TYPE_TEXT.get(
-                            question.type, question.type
-                        ),
-                        "score": answer.score,
-                        "full_score": question.score,
-                    }
-                )
+            max_questions = max(len(qs) for qs in questions_by_exam.values())
+            for row in student_detail:
+                for i in range(1, max_questions + 1):
+                    row.setdefault(f"q{i}")
+            for answer, question in answer_rows:
+                row = record_by_id.get(answer.record_id)
+                no = question_no.get(question.id)
+                if row is not None and no is not None:
+                    row[f"q{no}"] = answer.score
 
     return {
         "class_summary": class_summary,
-        "student_scores": student_scores,
-        "question_details": question_details,
+        "student_detail": student_detail,
     }
 
 
@@ -249,8 +222,22 @@ def render_score_export(datasets: dict[str, list[dict]]) -> tuple[bytes, str, st
     question_headers = {**_CHINESE_HEADERS, "score": "得分"}
     sheet_specs = [
         ("class_summary", "班级成绩汇总", CLASS_SUMMARY_COLUMNS, _CHINESE_HEADERS),
-        ("student_scores", "学生成绩", STUDENT_SCORE_COLUMNS, _CHINESE_HEADERS),
-        ("question_details", "题目得分明细", QUESTION_DETAIL_COLUMNS, question_headers),
+        ("student_scores", "学生成绩", STUDENT_DETAIL_BASE_COLUMNS, _CHINESE_HEADERS),
+        (
+            "question_details",
+            "题目得分明细",
+            [
+                "student_name",
+                "class_name",
+                "course_name",
+                "exam_title",
+                "question_no",
+                "question_type",
+                "score",
+                "full_score",
+            ],
+            question_headers,
+        ),
     ]
     for name, sheet_title, columns, headers in sheet_specs:
         sheet = workbook.create_sheet(sheet_title)
