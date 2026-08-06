@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { App, Row, Col, Card, Statistic, Button, Dropdown } from 'antd';
+import { App, Row, Col, Card, Statistic, Button, Dropdown, Modal, Select, Space } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   FileTextOutlined,
@@ -14,8 +14,9 @@ import {
   FileExcelOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { exportDashboard, getDashboard } from '../../api/statistics';
+import { exportDashboard, exportScores, getDashboard, getScoreExportOptions } from '../../api/statistics';
 import type { DashboardData } from '../../types/dashboard';
+import type { ScoreExportOptions } from '../../types/scoreExport';
 import dayjs from 'dayjs';
 import useAuthStore from '../../store/auth';
 import StatusTag from '../../components/StatusTag';
@@ -49,6 +50,11 @@ const Dashboard = () => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState<'csv' | 'xlsx' | null>(null);
+  const [scoreModalOpen, setScoreModalOpen] = useState(false);
+  const [scoreOptions, setScoreOptions] = useState<ScoreExportOptions | null>(null);
+  const [scoreClassId, setScoreClassId] = useState<number | undefined>();
+  const [scoreCourseId, setScoreCourseId] = useState<number | undefined>();
+  const [scoreExporting, setScoreExporting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -108,9 +114,35 @@ const Dashboard = () => {
     }
   };
 
+  const openScoreExport = async () => {
+    setScoreModalOpen(true);
+    if (scoreOptions) return;
+    try {
+      const res = await getScoreExportOptions();
+      setScoreOptions(res.data);
+    } catch (error) {
+      message.error('获取导出选项失败');
+    }
+  };
+
+  const handleExportScores = async () => {
+    setScoreExporting(true);
+    try {
+      const response = await exportScores(scoreClassId, scoreCourseId);
+      downloadDashboardFile(response, '成绩明细.xlsx');
+    } catch (error) {
+      message.error('导出成绩明细失败');
+    } finally {
+      setScoreExporting(false);
+    }
+  };
+
   const exportItems: MenuProps['items'] = [
     { key: 'csv', icon: <FileTextOutlined />, label: '导出 CSV 概览' },
     { key: 'xlsx', icon: <FileExcelOutlined />, label: '导出 Excel 全部数据' },
+    ...(isStudent
+      ? []
+      : [{ key: 'scores', icon: <FileExcelOutlined />, label: '成绩明细导出' }]),
   ];
 
   return (
@@ -119,7 +151,13 @@ const Dashboard = () => {
         <Dropdown
           menu={{
             items: exportItems,
-            onClick: ({ key }) => handleExport(key as 'csv' | 'xlsx'),
+            onClick: ({ key }) => {
+              if (key === 'scores') {
+                openScoreExport();
+              } else {
+                handleExport(key as 'csv' | 'xlsx');
+              }
+            },
           }}
           trigger={['click']}
         >
@@ -132,6 +170,44 @@ const Dashboard = () => {
           </Button>
         </Dropdown>
       </div>
+      <Modal
+        title="成绩明细导出"
+        open={scoreModalOpen}
+        onCancel={() => setScoreModalOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setScoreModalOpen(false)}>
+            取消
+          </Button>,
+          <Button
+            key="export"
+            type="primary"
+            loading={scoreExporting}
+            onClick={handleExportScores}
+          >
+            导出
+          </Button>,
+        ]}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Select
+            style={{ width: '100%' }}
+            placeholder="请选择班级"
+            allowClear
+            value={scoreClassId}
+            onChange={setScoreClassId}
+            options={scoreOptions?.classes.map((item) => ({ value: item.id, label: item.name }))}
+          />
+          <Select
+            style={{ width: '100%' }}
+            placeholder="请选择科目"
+            allowClear
+            value={scoreCourseId}
+            onChange={setScoreCourseId}
+            options={scoreOptions?.courses.map((item) => ({ value: item.id, label: item.name }))}
+          />
+          <span>不选班级/科目则导出全部数据</span>
+        </Space>
+      </Modal>
       <div className="dashboard-banner">
         <h1 className="dashboard-banner-title">
           你好,{user?.name || user?.username}
