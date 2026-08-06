@@ -1,12 +1,15 @@
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from openpyxl import load_workbook
 
 from app.services.score_export_service import (
     ScoreExportError,
     build_score_export_data,
     get_score_export_options,
+    render_score_export,
 )
 
 
@@ -268,3 +271,89 @@ async def test_teacher_get_options_limits_courses_to_assigned():
 
     assert options["classes"] == [{"id": 1, "name": "一班"}]
     assert options["courses"] == [{"id": 1, "name": "数学"}]
+
+
+def test_render_creates_three_sheets_with_chinese_headers():
+    datasets = {
+        "class_summary": [
+            {
+                "class_name": "一班",
+                "course_name": "数学",
+                "exam_title": "期中考试",
+                "student_count": 2,
+                "avg_score": 67.5,
+                "pass_rate": 50.0,
+                "max_score": 80,
+                "min_score": 55,
+            }
+        ],
+        "student_scores": [
+            {
+                "student_name": "小明",
+                "class_name": "一班",
+                "course_name": "数学",
+                "exam_title": "期中考试",
+                "score": 80,
+                "pass_score": 60,
+                "status": "已阅卷",
+            }
+        ],
+        "question_details": [
+            {
+                "student_name": "小明",
+                "class_name": "一班",
+                "course_name": "数学",
+                "exam_title": "期中考试",
+                "question_no": 1,
+                "question_type": "简答",
+                "score": 4,
+                "full_score": 5,
+            }
+        ],
+    }
+
+    content, media_type, filename = render_score_export(datasets)
+
+    assert media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert filename == "score-export.xlsx"
+    workbook = load_workbook(BytesIO(content), read_only=True)
+    assert workbook.sheetnames == ["班级成绩汇总", "学生成绩", "题目得分明细"]
+    assert list(workbook["班级成绩汇总"].values) == [
+        ("班级", "科目", "考试", "参考人数", "平均分", "及格率", "最高分", "最低分"),
+        ("一班", "数学", "期中考试", 2, 67.5, 50.0, 80, 55),
+    ]
+    assert list(workbook["学生成绩"].values)[0] == (
+        "学生姓名",
+        "班级",
+        "科目",
+        "考试",
+        "总分",
+        "及格线",
+        "状态",
+    )
+    assert list(workbook["题目得分明细"].values)[0] == (
+        "学生姓名",
+        "班级",
+        "科目",
+        "考试",
+        "题号",
+        "题型",
+        "得分",
+        "满分",
+    )
+
+
+def test_render_keeps_headers_when_datasets_empty():
+    datasets = {
+        "class_summary": [],
+        "student_scores": [],
+        "question_details": [],
+    }
+
+    content, _, _ = render_score_export(datasets)
+
+    workbook = load_workbook(BytesIO(content), read_only=True)
+    assert list(workbook["班级成绩汇总"].values) == [
+        ("班级", "科目", "考试", "参考人数", "平均分", "及格率", "最高分", "最低分")
+    ]
+    assert workbook["学生成绩"].max_row == 1

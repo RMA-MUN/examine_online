@@ -233,3 +233,30 @@ async def get_score_export_options(db: AsyncSession, user: User) -> dict:
         "classes": [{"id": cls.id, "name": cls.name} for cls in classes],
         "courses": [{"id": course.id, "name": course.name} for course in courses],
     }
+
+
+def render_score_export(datasets: dict[str, list[dict]]) -> tuple[bytes, str, str]:
+    """将成绩导出数据集渲染为三 Sheet 的 xlsx 文件。
+    :return: 元组 (文件字节内容, MIME 类型, 文件名)
+    """
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    question_headers = {**_CHINESE_HEADERS, "score": "得分"}
+    sheet_specs = [
+        ("class_summary", "班级成绩汇总", CLASS_SUMMARY_COLUMNS, _CHINESE_HEADERS),
+        ("student_scores", "学生成绩", STUDENT_SCORE_COLUMNS, _CHINESE_HEADERS),
+        ("question_details", "题目得分明细", QUESTION_DETAIL_COLUMNS, question_headers),
+    ]
+    for name, sheet_title, columns, headers in sheet_specs:
+        sheet = workbook.create_sheet(sheet_title)
+        sheet.append([headers[column] for column in columns])
+        sheet.freeze_panes = "A2"
+        for row in datasets[name]:
+            sheet.append([row.get(column) for column in columns])
+    output = BytesIO()
+    workbook.save(output)
+    return (
+        output.getvalue(),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "score-export.xlsx",
+    )
