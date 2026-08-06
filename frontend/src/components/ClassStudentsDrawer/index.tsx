@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { App, Drawer, Transfer } from 'antd';
 import type { TransferProps } from 'antd';
 import { batchUpdateClassStudents, getAvailableStudents, getClassStudents } from '../../api/classes';
@@ -28,22 +28,32 @@ const ClassStudentsDrawer = ({ open, onClose, classId, className, onChanged }: C
   const [loading, setLoading] = useState(false);
   const [dataSource, setDataSource] = useState<TransferItem[]>([]);
   const [targetKeys, setTargetKeys] = useState<number[]>([]);
+  const loadSeqRef = useRef(0);
 
   const load = async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
       const [inClass, available] = await Promise.all([
         getClassStudents(classId),
         getAvailableStudents(classId),
       ]);
+      if (seq !== loadSeqRef.current) {
+        return;
+      }
       const inClassItems = (inClass.data || []).map(toTransferItem);
       const availableItems = (available.data || []).map(toTransferItem);
       setDataSource([...inClassItems, ...availableItems]);
       setTargetKeys(inClassItems.map((i) => i.key));
     } catch (error) {
+      if (seq !== loadSeqRef.current) {
+        return;
+      }
       message.error('获取班级学生失败');
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -59,19 +69,22 @@ const ClassStudentsDrawer = ({ open, onClose, classId, className, onChanged }: C
     const toAdd = dataSource.filter((i) => next.has(i.key) && !prev.has(i.key)).map((i) => i.key);
     const toRemove = dataSource.filter((i) => !next.has(i.key) && prev.has(i.key)).map((i) => i.key);
 
-    if (toAdd.length > 0 || toRemove.length > 0) {
-      try {
-        if (toAdd.length > 0) {
-          await batchUpdateClassStudents(classId, 'add', toAdd);
-        }
-        if (toRemove.length > 0) {
-          await batchUpdateClassStudents(classId, 'remove', toRemove);
-        }
-        message.success('更新成功');
-        onChanged?.();
-      } catch (error) {
-        message.error('更新失败');
+    if (toAdd.length === 0 && toRemove.length === 0) {
+      return;
+    }
+
+    setTargetKeys(nextKeys as number[]);
+    try {
+      if (toAdd.length > 0) {
+        await batchUpdateClassStudents(classId, 'add', toAdd);
       }
+      if (toRemove.length > 0) {
+        await batchUpdateClassStudents(classId, 'remove', toRemove);
+      }
+      message.success('更新成功');
+      onChanged?.();
+    } catch (error) {
+      message.error('更新失败');
     }
     await load();
   };
@@ -87,7 +100,7 @@ const ClassStudentsDrawer = ({ open, onClose, classId, className, onChanged }: C
       titles: ['可加入学生', '班级学生'],
       render: (item: TransferItem) => item.title,
     }),
-    [dataSource, targetKeys]
+    [dataSource, targetKeys, classId]
   );
 
   return (
