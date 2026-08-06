@@ -7,14 +7,19 @@ from sqlalchemy.exc import IntegrityError
 from app.models.user import User
 from app.utils.security import hash_password_async
 
-async def get_users(db: AsyncSession, page: int = 1, page_size: int = 10, role: str = None):
-    """分页查询用户列表，可按角色过滤。
+async def get_users(db: AsyncSession, page: int = 1, page_size: int = 10, role: str = None, class_id: int = None):
+    """分页查询用户列表，可按角色、班级过滤；class_id=-1 表示未分配班级。
 
     :return: 元组 (当前页用户列表, 总记录数)
     """
     query = select(User)
     if role:
         query = query.where(User.role == role)
+    if class_id is not None and class_id != 0:
+        if class_id == -1:
+            query = query.where(User.class_id.is_(None))
+        else:
+            query = query.where(User.class_id == class_id)
 
     # 获取总数
     count_query = select(func.count()).select_from(query.subquery())

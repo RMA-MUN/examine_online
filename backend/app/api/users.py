@@ -17,11 +17,12 @@ async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     role: Optional[str] = None,
+    class_id: Optional[int] = Query(None, ge=-1),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["admin"]))
 ):
-    """分页获取用户列表，支持按角色筛选，仅管理员可调用。"""
-    users, total = await get_users(db, page, page_size, role)
+    """分页获取用户列表，支持按角色、班级筛选，仅管理员可调用。"""
+    users, total = await get_users(db, page, page_size, role, class_id)
     users_data = [UserResponse.model_validate(u).model_dump() for u in users]
     return paginated_response(users_data, total, page, page_size)
 
