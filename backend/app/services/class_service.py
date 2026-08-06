@@ -96,3 +96,41 @@ async def get_class_students(db: AsyncSession, class_id: int) -> List[User]:
         select(User).where(User.class_id == class_id, User.role == "student")
     )
     return list(result.scalars().all())
+
+
+async def get_available_students(db: AsyncSession) -> List[User]:
+    """获取未分配班级的学生（供批量加入班级时选择）。"""
+    result = await db.execute(
+        select(User).where(User.role == "student", User.class_id.is_(None)).order_by(User.id)
+    )
+    return list(result.scalars().all())
+
+
+async def add_students_to_class(db: AsyncSession, class_id: int, student_ids: List[int]) -> int:
+    """将学生批量加入班级（仅 role=student 且存在的用户生效）。
+
+    :return: 实际生效条数
+    """
+    updated = 0
+    for student_id in student_ids:
+        student = await db.get(User, student_id)
+        if student and student.role == "student":
+            student.class_id = class_id
+            updated += 1
+    await db.commit()
+    return updated
+
+
+async def remove_students_from_class(db: AsyncSession, class_id: int, student_ids: List[int]) -> int:
+    """将学生从班级移除（仅清空当前属于该班级的学生，其他班级不受影响）。
+
+    :return: 实际生效条数
+    """
+    updated = 0
+    for student_id in student_ids:
+        student = await db.get(User, student_id)
+        if student and student.class_id == class_id:
+            student.class_id = None
+            updated += 1
+    await db.commit()
+    return updated

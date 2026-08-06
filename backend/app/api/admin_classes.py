@@ -2,14 +2,16 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.class_ import SchoolClass
 from app.models.user import User
-from app.schemas.class_ import ClassCreate, ClassResponse, ClassUpdate
+from app.schemas.class_ import ClassCreate, ClassResponse, ClassStudentBatchRequest, ClassUpdate
 from app.services.class_service import (
-    create_class, delete_class, get_classes, get_class_students, update_class,
+    add_students_to_class, create_class, delete_class, get_available_students, get_classes,
+    get_class_students, remove_students_from_class, update_class,
 )
 from app.utils.deps import require_role
 from app.utils.response import error_response, success_response
@@ -97,3 +99,33 @@ async def list_class_students(
     return success_response(data=[
         {"id": s.id, "username": s.username, "name": s.name} for s in students
     ])
+
+
+@router.get("/api/admin/classes/{class_id}/available-students")
+async def list_available_students(
+    class_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role(["admin"])),
+):
+    """获取未分配班级的学生列表，供批量加入班级时选择，仅管理员可调用。"""
+    students = await get_available_students(db)
+    return success_response(data=[
+        {"id": s.id, "username": s.username, "name": s.name} for s in students
+    ])
+
+
+@router.post("/api/admin/classes/{class_id}/students/batch")
+async def batch_update_class_students(
+    class_id: int,
+    data: ClassStudentBatchRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_role(["admin"])),
+):
+    """批量加入/移除班级学生，仅管理员可调用。"""
+    if not await db.get(SchoolClass, class_id):
+        raise HTTPException(status_code=404, detail="班级不存在")
+    if data.action == "add":
+        updated = await add_students_to_class(db, class_id, data.student_ids)
+    else:
+        updated = await remove_students_from_class(db, class_id, data.student_ids)
+    return success_response(data={"updated": updated})

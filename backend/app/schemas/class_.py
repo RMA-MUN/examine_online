@@ -1,7 +1,7 @@
 """班级相关的请求/响应 Pydantic 模型。"""
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 
@@ -28,3 +28,9 @@ class ClassResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ClassStudentBatchRequest(BaseModel):
+    """批量增删班级学生请求体。"""
+    action: Literal["add", "remove"]
+    student_ids: list[int]
