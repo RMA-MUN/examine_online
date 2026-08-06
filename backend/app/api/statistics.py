@@ -12,6 +12,12 @@ from app.services.dashboard_export_service import (
     get_dashboard_export_datasets,
     render_dashboard_export,
 )
+from app.services.score_export_service import (
+    ScoreExportError,
+    build_score_export_data,
+    get_score_export_options,
+    render_score_export,
+)
 from app.utils.deps import get_current_user, require_role
 from app.utils.response import success_response
 from app.models.user import User
@@ -84,3 +90,34 @@ async def export_dashboard_file(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/api/statistics/scores/export")
+async def export_scores_file(
+    class_id: int | None = Query(default=None),
+    course_id: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"])),
+):
+    """导出成绩明细 Excel（班级成绩汇总、学生成绩/题目得分明细），仅教师/管理员可调用。"""
+    try:
+        datasets = await build_score_export_data(db, current_user, class_id, course_id)
+        content, media_type, filename = render_score_export(datasets)
+    except ScoreExportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/api/statistics/scores/export-options")
+async def get_score_export_options_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"])),
+):
+    """返回当前用户可导出的班级与科目选项，仅教师/管理员可调用。"""
+    options = await get_score_export_options(db, current_user)
+    return success_response(data=options)

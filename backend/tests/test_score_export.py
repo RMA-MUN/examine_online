@@ -3,8 +3,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
+from fastapi.responses import StreamingResponse
 from openpyxl import load_workbook
 
+from app.api import statistics
 from app.services.score_export_service import (
     ScoreExportError,
     build_score_export_data,
@@ -357,3 +360,81 @@ def test_render_keeps_headers_when_datasets_empty():
         ("班级", "科目", "考试", "参考人数", "平均分", "及格率", "最高分", "最低分")
     ]
     assert workbook["学生成绩"].max_row == 1
+
+
+@pytest.mark.asyncio
+async def test_export_scores_endpoint_returns_streaming_response(monkeypatch):
+    monkeypatch.setattr(
+        statistics,
+        "build_score_export_data",
+        AsyncMock(
+            return_value={
+                "class_summary": [],
+                "student_scores": [],
+                "question_details": [],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        statistics,
+        "render_score_export",
+        lambda datasets: (b"xlsx-content", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "score-export.xlsx"),
+    )
+    db = FakeSession([])
+
+    response = await statistics.export_scores_file(
+        class_id=None,
+        course_id=None,
+        db=db,
+        current_user=SimpleNamespace(id=3, role="admin"),
+    )
+
+    assert isinstance(response, StreamingResponse)
+    assert response.media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert response.headers["content-disposition"].startswith("attachment;")
+    assert '"score-export.xlsx"' in response.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
+async def test_export_scores_endpoint_rejects_out_of_scope_course(monkeypatch):
+    monkeypatch.setattr(
+        statistics,
+        "build_score_export_data",
+        AsyncMock(side_effect=ScoreExportError("无权导出该科目的数据")),
+    )
+    db = FakeSession([])
+
+    with pytest.raises(HTTPException) as exc_info:
+        await statistics.export_scores_file(
+            class_id=None,
+            course_id=99,
+            db=db,
+            current_user=SimpleNamespace(id=2, role="teacher"),
+        )
+
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_export_options_endpoint_returns_options(monkeypatch):
+    monkeypatch.setattr(
+        statistics,
+        "get_score_export_options",
+        AsyncMock(
+            return_value={
+                "classes": [{"id": 1, "name": "一班"}],
+                "courses": [{"id": 1, "name": "数学"}],
+            }
+        ),
+    )
+    db = FakeSession([])
+
+    response = await statistics.get_score_export_options_endpoint(
+        db=db,
+        current_user=SimpleNamespace(id=2, role="teacher"),
+    )
+
+    assert response["data"] == {
+        "classes": [{"id": 1, "name": "一班"}],
+        "courses": [{"id": 1, "name": "数学"}],
+    }
