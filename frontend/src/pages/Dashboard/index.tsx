@@ -119,14 +119,15 @@ const Dashboard = () => {
   return (
     <div className="dashboard">
       <div className="dashboard-toolbar">
-        <Button
-          icon={<FileExcelOutlined />}
-          loading={scoreExporting}
-          onClick={openScoreExport}
-          hidden={isStudent}
-        >
-          成绩明细导出
-        </Button>
+        {!isStudent && (
+          <Button
+            icon={<FileExcelOutlined />}
+            loading={scoreExporting}
+            onClick={openScoreExport}
+          >
+            成绩明细导出
+          </Button>
+        )}
       </div>
       <Modal
         title="成绩明细导出"

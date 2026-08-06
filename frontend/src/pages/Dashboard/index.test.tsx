@@ -136,7 +136,7 @@ describe('Dashboard', () => {
   ] as const)('renders only the charts for the current role', async (data, labels) => {
     renderDashboard(data);
 
-    expect(await screen.findByText('成绩明细导出')).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: labels[0] })).toBeInTheDocument();
     labels.forEach((label) => expect(screen.getByRole('img', { name: label })).toBeInTheDocument());
     const chartLabels = [
       '最近成绩与及格线图表',
