@@ -128,10 +128,12 @@ async def build_score_export_data(
         school_class.name if school_class is not None else _NO_CLASS
     )
 
-    grouped: dict[tuple, dict] = {}
+    grouped: dict[tuple, list[int]] = {}
     student_scores = []
     record_by_id = {}
+    exam_ids: set[int] = set()
     for record, student, course, exam, school_class in rows:
+        exam_ids.add(exam.id)
         class_name = class_name_of(school_class)
         record_by_id[record.id] = (
             student,
@@ -180,8 +182,11 @@ async def build_score_export_data(
             )
         ).all()
         if answer_rows:
+            questions = (
+                await db.execute(select(Question).where(Question.exam_id.in_(exam_ids)))
+            ).scalars().all()
             questions_by_exam: dict[int, list] = defaultdict(list)
-            for _, question in answer_rows:
+            for question in questions:
                 questions_by_exam[question.exam_id].append(question)
             question_no: dict[int, int] = {}
             for exam_questions in questions_by_exam.values():
@@ -201,7 +206,7 @@ async def build_score_export_data(
                         "class_name": class_name,
                         "course_name": course_name,
                         "exam_title": exam_title,
-                        "question_no": question_no.get(question.id, 0),
+                        "question_no": question_no[question.id],
                         "question_type": _QUESTION_TYPE_TEXT.get(
                             question.type, question.type
                         ),
