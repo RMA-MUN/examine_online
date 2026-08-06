@@ -20,6 +20,9 @@ async def get_users(db: AsyncSession, page: int = 1, page_size: int = 10, role: 
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar()
 
+    # 固定按 id 升序，保证分页顺序稳定（MySQL 无排序时顺序不确定）
+    query = query.order_by(User.id)
+
     # 分页
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)

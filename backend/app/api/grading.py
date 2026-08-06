@@ -1,6 +1,7 @@
 """阅卷管理接口：负责教师查看考试记录与答卷、手动评分、AI评分重试、成绩定稿及学生查看成绩。"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.answer import GradeRequest
@@ -10,6 +11,8 @@ from app.services.teacher_subject_service import can_teacher_manage_exam
 from app.utils.deps import get_current_user, require_role
 from app.utils.response import success_response, paginated_response
 from app.models.exam_record import ExamRecord
+from app.models.question import Question
+from app.models.answer import Answer
 from app.models.user import User
 
 router = APIRouter(tags=["阅卷管理"])
@@ -60,6 +63,21 @@ async def grade_single_answer(
     if exam_id is None:
         raise HTTPException(status_code=404, detail="答案不存在")
     await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    # 校验分数不超过题目分值，防止总分失真（负数已在 Pydantic 层拒绝）
+    max_score = (
+        await db.execute(
+            select(Question.score)
+            .join(Answer, Answer.question_id == Question.id)
+            .where(Answer.id == answer_id)
+        )
+    ).scalar_one_or_none()
+    if max_score is None:
+        raise HTTPException(status_code=404, detail="答案不存在")
+    if grade_data.score > max_score:
+        raise HTTPException(
+            status_code=400,
+            detail=f"分数不能超过题目分值 {max_score}",
+        )
     answer = await grade_answer(
         db,
         answer_id,
@@ -100,6 +118,12 @@ async def finalize_record_action(
     if exam_id is None:
         raise HTTPException(status_code=404, detail="记录不存在")
     await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    # 状态校验：仅已提交待阅卷的记录可定稿，进行中/已定稿不可重复操作
+    record = await db.get(ExamRecord, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    if record.status != "submitted":
+        raise HTTPException(status_code=400, detail="仅已提交的记录可定稿")
     record = await finalize_record(db, record_id)
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")

@@ -5,8 +5,12 @@ from sqlalchemy import select
 from app.database import get_db
 from app.utils.security import decode_access_token
 from app.models.user import User
+from app.redis_client import redis_client
+import logging
 
 """认证依赖模块：解析请求中的 Bearer Token 获取当前用户，并提供角色权限校验依赖。"""
+
+logger = logging.getLogger("app.deps")
 
 security = HTTPBearer()
 
@@ -16,7 +20,7 @@ async def get_current_user(
 ) -> User:
     """校验请求携带的 JWT，从数据库加载并返回当前登录用户。
 
-    令牌无效、缺失用户标识、用户不存在或被禁用时，抛出对应的 HTTP 异常。
+    令牌无效、缺失用户标识、已被登出（黑名单）、用户不存在或被禁用时，抛出对应的 HTTP 异常。
     """
     token = credentials.credentials
     payload = decode_access_token(token)
@@ -25,6 +29,18 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的Token"
+        )
+
+    # 登出黑名单检查：token 被登出后应立即失效；Redis 异常时放行（基础设施故障降级）
+    try:
+        blacklisted = await redis_client.get(f"blacklist:token:{token}")
+    except Exception:
+        logger.warning("黑名单检查失败，放行 token（Redis 不可用）")
+        blacklisted = None
+    if blacklisted:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token 已失效"
         )
     
     # token 中缺少 sub 用户标识声明，视为无效 token

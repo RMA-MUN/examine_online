@@ -2,6 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from app.config import settings
 from app.models.user import User
 from app.utils.security import verify_password_async, create_access_token, hash_password_async
 from app.redis_client import redis_client
@@ -26,8 +27,11 @@ async def create_token(user: User) -> str:
 
 async def logout_user(token: str):
     """登出：将令牌加入 Redis 黑名单，使其在剩余有效期内失效。"""
-    # 黑名单有效期 7200 秒，与令牌自身有效期保持一致
-    await redis_client.set(f"blacklist:token:{token}", "1", ex=7200)
+    # 黑名单有效期与令牌自身有效期保持一致
+    await redis_client.set(
+        f"blacklist:token:{token}", "1",
+        ex=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 async def change_password(db: AsyncSession, user: User, old_password: str, new_password: str):
     """修改用户密码。

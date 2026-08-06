@@ -1,6 +1,6 @@
 """答题记录与阅卷相关的请求/响应 Pydantic 模型。"""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any, Optional
 from datetime import datetime
 
@@ -34,7 +34,7 @@ class AnswerResponse(AnswerBase):
 
 class GradeRequest(BaseModel):
     """人工改分请求体。"""
-    score: int
+    score: int = Field(ge=0)  # 分数不能为负，上限由题目分值在接口层校验
     is_correct: Optional[bool] = None
     override_reason: Optional[str] = None  # 改分原因
 

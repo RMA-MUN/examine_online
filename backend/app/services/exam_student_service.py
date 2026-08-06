@@ -3,9 +3,9 @@
 import json
 import random
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from app.models.exam import Exam
 from app.models.question import Question
 from app.models.exam_record import ExamRecord
@@ -36,6 +36,24 @@ def _normalize_answer(q_type: str, value) -> str:
     if q_type == "judge":
         v = _JUDGE_ANSWER_MAP.get(v, v)
     return v
+
+def _is_within_duration(exam: Exam, record: ExamRecord) -> bool:
+    """判断作答是否仍在考试时长内：超过开始时间 + 时长视为超时（防超时作弊）。"""
+    deadline = record.start_time + timedelta(minutes=exam.duration)
+    return datetime.now() <= deadline
+
+async def _claim_submit(db: AsyncSession, record_id: int) -> bool:
+    """原子抢占交卷权：仅当记录仍为 ongoing 时置为 submitted。
+
+    并发双提交场景下，两个请求可能同时通过 ongoing 查询；此处用条件 UPDATE
+    保证只有一个请求抢占成功（rowcount=1），另一个 rowcount=0 被拒绝。
+    """
+    result = await db.execute(
+        update(ExamRecord)
+        .where(ExamRecord.id == record_id, ExamRecord.status == "ongoing")
+        .values(status="submitted")
+    )
+    return result.rowcount > 0
 
 async def start_exam(db: AsyncSession, exam_id: int, student_id: int):
     """学生开始考试：校验资格/考试状态/时间，创建考试记录并缓存试卷。
@@ -220,7 +238,12 @@ async def save_answers(db: AsyncSession, exam_id: int, student_id: int, answers:
     record = result.scalar_one_or_none()
     if not record:
         return False, "考试未进行中"
-    
+
+    # 后端强制考试时长：超过开始时间 + 时长后禁止继续作答（倒计时仅前端不可信）
+    exam = await db.get(Exam, exam_id)
+    if not exam or not _is_within_duration(exam, record):
+        return False, "考试时间已到，无法继续作答"
+
     # 保存答案到Redis（自动保存）
     await redis_client.set(
         f"exam:autosave:{exam_id}:{student_id}",
@@ -246,6 +269,16 @@ async def submit_exam(db: AsyncSession, exam_id: int, student_id: int, submitted
     record = result.scalar_one_or_none()
     if not record:
         return None, "考试未进行中"
+
+    # 后端强制考试时长：超过开始时间 + 时长后禁止交卷（倒计时仅前端不可信）
+    exam = await db.get(Exam, exam_id)
+    if not exam or not _is_within_duration(exam, record):
+        return None, "考试时间已到，无法交卷"
+
+    # 原子抢占交卷权：并发双提交只有一个能成功，另一个在此被拒绝
+    if not await _claim_submit(db, record.id):
+        await db.rollback()
+        return None, "考试已提交，请勿重复提交"
 
     # 优先使用交卷请求携带的答案，避免依赖30秒自动保存的时机
     if submitted_answers:

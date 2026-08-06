@@ -9,7 +9,8 @@ from app.database import get_db
 from app.schemas.question import QuestionCreate, QuestionUpdate, QuestionResponse, QuestionImport
 from app.services.question_service import get_questions, get_question, create_question, batch_create_questions, update_question, delete_question
 from app.services.question_import_service import parse_excel, parse_word, get_import_summary
-from app.utils.deps import get_current_user, require_role
+from app.services.teacher_subject_service import can_teacher_manage_exam
+from app.utils.deps import require_role
 from app.utils.response import success_response, paginated_response
 from app.models.user import User
 
@@ -18,6 +19,16 @@ logger = logging.getLogger("app.api.questions")
 router = APIRouter(tags=["题目管理"])
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "templates")
+
+# 题目导入文件大小上限（10MB）：防止超大文件/解压炸弹整读内存导致 DoS
+MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024
+
+async def _ensure_teacher_can_manage_exam(db: AsyncSession, current_user: User, exam_id: int):
+    """校验教师是否具备管理指定考试的权限，不具备则抛出 403；管理员不受限。"""
+    if current_user.role == "teacher" and not await can_teacher_manage_exam(
+        db, current_user.id, exam_id
+    ):
+        raise HTTPException(status_code=403, detail="无权管理该考试")
 
 @router.get("/api/questions/template/{format}")
 async def download_template(
@@ -54,6 +65,7 @@ async def import_questions_from_file(
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
     """通过上传 Excel/Word 文件批量导入题目到指定考试，仅教师/管理员可调用。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
     # Validate file extension
     # 校验文件扩展名，仅支持 xlsx/docx
     if not file.filename:
@@ -62,6 +74,17 @@ async def import_questions_from_file(
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in (".xlsx", ".docx"):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx 或 .docx 格式")
+
+    # Validate file size
+    # 按已落盘文件的实际尺寸判断，超限直接拒绝，避免大文件整体读入内存
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+    if size > MAX_IMPORT_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件大小不能超过 {MAX_IMPORT_FILE_SIZE // (1024 * 1024)}MB",
+        )
 
     # Parse file
     # 按扩展名选择对应的解析器（Excel 或 Word）
@@ -131,9 +154,10 @@ async def list_questions(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
-    """分页获取指定考试的题目列表，所有已登录用户均可调用。"""
+    """分页获取指定考试的题目列表，仅教师/管理员可调用；教师需具备该考试的管理权限。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
     questions, total = await get_questions(db, exam_id, page, page_size)
     questions_data = [QuestionResponse.model_validate(q).model_dump() for q in questions]
     return paginated_response(questions_data, total, page, page_size)
@@ -145,7 +169,8 @@ async def create_new_question(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
-    """在指定考试下创建单道题目，仅教师/管理员可调用。"""
+    """在指定考试下创建单道题目，仅教师/管理员可调用；教师需具备该考试的管理权限。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
     question = await create_question(db, exam_id, question_data.model_dump())
     return success_response(data=QuestionResponse.model_validate(question).model_dump())
 
@@ -156,7 +181,8 @@ async def import_questions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
-    """通过 JSON 数据批量导入题目到指定考试，仅教师/管理员可调用。"""
+    """通过 JSON 数据批量导入题目到指定考试，仅教师/管理员可调用；教师需具备该考试的管理权限。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
     questions = await batch_create_questions(
         db, exam_id, [q.model_dump() for q in import_data.questions]
     )
@@ -170,7 +196,11 @@ async def update_question_info(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
-    """修改指定题目的内容，仅教师/管理员可调用。"""
+    """修改指定题目的内容，仅教师/管理员可调用；教师需具备题目所属考试的管理权限。"""
+    question = await get_question(db, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    await _ensure_teacher_can_manage_exam(db, current_user, question.exam_id)
     question = await update_question(db, question_id, question_data.model_dump(exclude_unset=True))
     if not question:
         raise HTTPException(status_code=404, detail="题目不存在")
@@ -182,7 +212,11 @@ async def delete_question_info(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
-    """删除指定题目，仅教师/管理员可调用。"""
+    """删除指定题目，仅教师/管理员可调用；教师需具备题目所属考试的管理权限。"""
+    question = await get_question(db, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    await _ensure_teacher_can_manage_exam(db, current_user, question.exam_id)
     success = await delete_question(db, question_id)
     if not success:
         raise HTTPException(status_code=404, detail="题目不存在")
