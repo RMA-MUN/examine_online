@@ -123,15 +123,6 @@ async def build_score_export_data(
         query = query.where(User.class_id == class_id)
 
     rows = (await db.execute(query)).all()
-    rows = [
-        row
-        for row in rows
-        if row[0].score is not None
-        and row[0].status in ("submitted", "graded")
-        and (assigned is None or row[3].course_id in assigned)
-        and (course_id is None or row[3].course_id == course_id)
-        and (class_id is None or row[1].class_id == class_id)
-    ]
 
     class_name_of = lambda school_class: (  # noqa: E731
         school_class.name if school_class is not None else _NO_CLASS
@@ -236,7 +227,6 @@ async def get_score_export_options(db: AsyncSession, user: User) -> dict:
             .scalars()
             .all()
         )
-        courses = [course for course in courses if course.id in assigned]
     else:
         courses = (await db.execute(select(Course))).scalars().all()
     return {

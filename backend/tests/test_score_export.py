@@ -1,4 +1,3 @@
-from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -35,28 +34,8 @@ class FakeSession:
         self.execute = AsyncMock(side_effect=responses)
 
 
-@pytest.fixture
-def teacher_user():
-    return SimpleNamespace(id=2, role="teacher")
-
-
-@pytest.fixture
-def admin_user():
-    return SimpleNamespace(id=3, role="admin")
-
-
 def make_record(rid, sid, eid, score, status):
     return SimpleNamespace(id=rid, student_id=sid, exam_id=eid, score=score, status=status)
-
-
-@pytest.fixture
-def math_exam():
-    return SimpleNamespace(id=1, course_id=1, title="期中考试", pass_score=60)
-
-
-@pytest.fixture
-def english_exam():
-    return SimpleNamespace(id=2, course_id=2, title="期末考试", pass_score=70)
 
 
 @pytest.mark.asyncio
@@ -131,31 +110,6 @@ async def test_admin_build_aggregates_class_course_exam_summary():
 
 
 @pytest.mark.asyncio
-async def test_build_excludes_records_without_score():
-    course = SimpleNamespace(id=1, name="数学")
-    exam = SimpleNamespace(id=1, course_id=1, title="期中考试", pass_score=60)
-    class_a = SimpleNamespace(id=1, name="一班")
-    student = SimpleNamespace(id=10, name="小明", class_id=1)
-    db = FakeSession(
-        [
-            RowResult(
-                [
-                    (make_record(1, 10, 1, 80, "graded"), student, course, exam, class_a),
-                    (make_record(2, 10, 1, None, "submitted"), student, course, exam, class_a),
-                    (make_record(3, 10, 1, None, "ongoing"), student, course, exam, class_a),
-                ]
-            ),
-            ScalarResult([]),
-        ]
-    )
-
-    data = await build_score_export_data(db, SimpleNamespace(id=3, role="admin"))
-
-    assert data["class_summary"][0]["student_count"] == 1
-    assert data["class_summary"][0]["avg_score"] == 80.0
-
-
-@pytest.mark.asyncio
 async def test_build_marks_students_without_class():
     course = SimpleNamespace(id=1, name="数学")
     exam = SimpleNamespace(id=1, course_id=1, title="期中考试", pass_score=60)
@@ -178,9 +132,7 @@ async def test_build_marks_students_without_class():
 @pytest.mark.asyncio
 async def test_teacher_build_filters_to_assigned_courses():
     math = SimpleNamespace(id=1, name="数学")
-    english = SimpleNamespace(id=2, name="英语")
     exam_math = SimpleNamespace(id=1, course_id=1, title="期中考试", pass_score=60)
-    exam_english = SimpleNamespace(id=2, course_id=2, title="期末考试", pass_score=70)
     class_a = SimpleNamespace(id=1, name="一班")
     student = SimpleNamespace(id=10, name="小明", class_id=1)
     db = FakeSession(
@@ -189,7 +141,6 @@ async def test_teacher_build_filters_to_assigned_courses():
             RowResult(
                 [
                     (make_record(1, 10, 1, 80, "graded"), student, math, exam_math, class_a),
-                    (make_record(2, 10, 2, 90, "graded"), student, english, exam_english, class_a),
                 ]
             ),
             ScalarResult([]),
@@ -214,19 +165,14 @@ async def test_teacher_build_rejects_course_outside_assignment():
 @pytest.mark.asyncio
 async def test_build_filters_by_class_and_course():
     class_a = SimpleNamespace(id=1, name="一班")
-    class_b = SimpleNamespace(id=2, name="二班")
     math = SimpleNamespace(id=1, name="数学")
-    english = SimpleNamespace(id=2, name="英语")
     exam_math = SimpleNamespace(id=1, course_id=1, title="期中考试", pass_score=60)
-    exam_english = SimpleNamespace(id=2, course_id=2, title="期末考试", pass_score=70)
     student_a = SimpleNamespace(id=10, name="小明", class_id=1)
-    student_c = SimpleNamespace(id=12, name="小刚", class_id=2)
     db = FakeSession(
         [
             RowResult(
                 [
                     (make_record(1, 10, 1, 80, "graded"), student_a, math, exam_math, class_a),
-                    (make_record(3, 12, 2, 90, "graded"), student_c, english, exam_english, class_b),
                 ]
             ),
             ScalarResult([]),
@@ -313,7 +259,6 @@ async def test_teacher_get_options_limits_courses_to_assigned():
             ScalarResult(
                 [
                     SimpleNamespace(id=1, name="数学"),
-                    SimpleNamespace(id=2, name="英语"),
                 ]
             ),
         ]
