@@ -1,10 +1,14 @@
-.class-students-transfer .ant-transfer {
-  width: 100%;
+.class-students-transfer {
+  height: calc(100dvh - 180px);
 }
 
 .class-students-transfer .ant-transfer-list {
-  flex: 1;
-  /* 两栏高度按视口自适应：抽屉内填满，滚动只发生在列表内部 */
-  height: calc(100dvh - 230px);
-  min-height: 320px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100% !important;
+}
+
+.class-students-transfer .ant-transfer-list-content {
+  height: 100%;
+  overflow-y: auto;
 }

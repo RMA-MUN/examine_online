@@ -108,10 +108,19 @@ const ClassStudentsDrawer = ({ open, onClose, classId, className, onChanged }: C
       title={className ? `管理班级学生：${className}` : '管理班级学生'}
       open={open}
       onClose={onClose}
-      width={760}
+      width={840}
+      size="large"
     >
       <div className="class-students-transfer">
-        <Transfer {...options} rowKey={(i) => i.key} />
+        <Transfer
+          {...options}
+          rowKey={(i) => i.key}
+          listStyle={{
+            flex: '1 1 0',
+            minWidth: 0,
+            height: '100%',
+          }}
+        />
       </div>
     </Drawer>
   );
