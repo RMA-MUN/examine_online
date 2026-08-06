@@ -14,5 +14,21 @@ export const updateClass = (id: number, data: ClassUpdate): Promise<ApiResponse<
 export const deleteClass = (id: number): Promise<ApiResponse<null>> =>
   axios.delete(`/api/admin/classes/${id}`) as Promise<ApiResponse<null>>;
 
-export const getClassStudents = (id: number): Promise<ApiResponse<Array<{ id: number; username: string; name: string }>>> =>
-  axios.get(`/api/admin/classes/${id}/students`) as Promise<ApiResponse<Array<{ id: number; username: string; name: string }>>>;
+export interface ClassStudent {
+  id: number;
+  username: string;
+  name: string;
+}
+
+export const getClassStudents = (id: number): Promise<ApiResponse<ClassStudent[]>> =>
+  axios.get(`/api/admin/classes/${id}/students`) as Promise<ApiResponse<ClassStudent[]>>;
+
+export const getAvailableStudents = (id: number): Promise<ApiResponse<ClassStudent[]>> =>
+  axios.get(`/api/admin/classes/${id}/available-students`) as Promise<ApiResponse<ClassStudent[]>>;
+
+export const batchUpdateClassStudents = (
+  id: number,
+  action: 'add' | 'remove',
+  studentIds: number[]
+): Promise<ApiResponse<{ updated: number }>> =>
+  axios.post(`/api/admin/classes/${id}/students/batch`, { action, student_ids: studentIds }) as Promise<ApiResponse<{ updated: number }>>;

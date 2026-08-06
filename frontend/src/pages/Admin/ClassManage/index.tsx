@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { App, Table, Button, Modal, Form, Input, Space, Popconfirm } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined } from '@ant-design/icons';
 import { getClasses, createClass, updateClass, deleteClass } from '../../../api/classes';
 import type { Class } from '../../../types/class';
 import PageHeader from '../../../components/PageHeader';
 import PageCard from '../../../components/PageCard';
 import EmptyState from '../../../components/EmptyState';
+import ClassStudentsDrawer from '../../../components/ClassStudentsDrawer';
 
 interface ClassFormValues {
   name: string;
@@ -23,6 +24,7 @@ const ClassManage = () => {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editing, setEditing] = useState<Class | null>(null);
+  const [studentsDrawer, setStudentsDrawer] = useState<Class | null>(null);
   const [form] = Form.useForm<ClassFormValues>();
 
   const fetchClasses = useCallback(async (p = page, ps = pageSize) => {
@@ -91,9 +93,10 @@ const ClassManage = () => {
     { title: '年级', dataIndex: 'grade', key: 'grade', width: 120 },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
     {
-      title: '操作', key: 'action', width: 180, fixed: 'right' as const,
+      title: '操作', key: 'action', width: 240, fixed: 'right' as const,
       render: (_, record) => (
         <Space>
+          <Button type="link" icon={<TeamOutlined />} onClick={() => setStudentsDrawer(record)}>学生</Button>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
           <Popconfirm title="确认删除该班级？" onConfirm={() => handleDelete(record.id)}>
             <Button type="link" danger icon={<DeleteOutlined />}>删除</Button>
@@ -147,6 +150,13 @@ const ClassManage = () => {
           </Form.Item>
         </Form>
       </Modal>
+      <ClassStudentsDrawer
+        open={!!studentsDrawer}
+        onClose={() => setStudentsDrawer(null)}
+        classId={studentsDrawer?.id ?? 0}
+        className={studentsDrawer?.name}
+        onChanged={() => fetchClasses()}
+      />
     </div>
   );
 };

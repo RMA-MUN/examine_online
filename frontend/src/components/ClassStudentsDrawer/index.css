@@ -1,0 +1,8 @@
+.class-students-transfer .ant-transfer {
+  width: 100%;
+}
+
+.class-students-transfer .ant-transfer-list {
+  flex: 1;
+  min-height: 320px;
+}
