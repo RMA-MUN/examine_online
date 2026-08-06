@@ -30,12 +30,19 @@ const UserManage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
+  const [roleFilter, setRoleFilter] = useState<UserRole | undefined>(undefined);
+  const [classFilter, setClassFilter] = useState<number | undefined>(undefined);
   const [form] = Form.useForm<UserFormValues>();
 
   const fetchUsers = useCallback(async (p: number = 1, ps: number = 10) => {
     setLoading(true);
     try {
-      const res = await getUsers({ page: p, page_size: ps });
+      const res = await getUsers({
+        page: p,
+        page_size: ps,
+        role: roleFilter,
+        class_id: classFilter,
+      });
       setUsers(res.data.items || []);
       setTotal(res.data.total || 0);
       setPage(p);
@@ -45,17 +52,27 @@ const UserManage = () => {
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, [message, roleFilter, classFilter]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    fetchUsers(page, pageSize);
+  }, [fetchUsers, page, pageSize]);
 
   useEffect(() => {
     getClasses({ page: 1, page_size: 100 })
       .then((res) => setClasses(res.data.items || []))
       .catch(() => {});
   }, []);
+
+  const handleRoleFilterChange = (value: UserRole | undefined) => {
+    setRoleFilter(value);
+    setPage(1);
+  };
+
+  const handleClassFilterChange = (value: number | undefined) => {
+    setClassFilter(value);
+    setPage(1);
+  };
 
   const handleAdd = () => {
     setEditingUser(null);
@@ -146,6 +163,31 @@ const UserManage = () => {
         }
       />
       <PageCard>
+        <Space style={{ marginBottom: 16 }} wrap>
+          <Select
+            allowClear
+            placeholder="按角色筛选"
+            style={{ width: 140 }}
+            value={roleFilter}
+            onChange={handleRoleFilterChange}
+            options={[
+              { value: 'student', label: '学生' },
+              { value: 'teacher', label: '教师' },
+              { value: 'admin', label: '管理员' },
+            ]}
+          />
+          <Select
+            allowClear
+            placeholder="按班级筛选"
+            style={{ width: 180 }}
+            value={classFilter}
+            onChange={handleClassFilterChange}
+            options={[
+              { value: -1, label: '未分配班级' },
+              ...classes.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
+        </Space>
         <Table
           columns={columns}
           dataSource={users}
@@ -157,7 +199,7 @@ const UserManage = () => {
             total,
             showSizeChanger: true,
             showTotal: (t: number) => `共 ${t} 条`,
-            onChange: (p: number, ps: number) => fetchUsers(p, ps),
+            onChange: (p: number, ps: number) => { setPage(p); setPageSize(ps); },
           }}
           locale={{
             emptyText: (

@@ -91,7 +91,7 @@ const ClassManage = () => {
     { title: '年级', dataIndex: 'grade', key: 'grade', width: 120 },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
     {
-      title: '操作', key: 'action', width: 140,
+      title: '操作', key: 'action', width: 180, fixed: 'right' as const,
       render: (_, record) => (
         <Space>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
