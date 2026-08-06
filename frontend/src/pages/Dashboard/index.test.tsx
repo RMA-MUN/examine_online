@@ -3,7 +3,7 @@ import { App } from 'antd';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './index';
-import { exportDashboard, exportScores, getDashboard, getScoreExportOptions } from '../../api/statistics';
+import { exportScores, getDashboard, getScoreExportOptions } from '../../api/statistics';
 import { downloadDashboardFile } from '../../utils/dashboardExport';
 import type { ApiResponse } from '../../types/api';
 import type {
@@ -13,7 +13,6 @@ import type {
 } from '../../types/dashboard';
 
 vi.mock('../../api/statistics', () => ({
-  exportDashboard: vi.fn(),
   getDashboard: vi.fn(),
   exportScores: vi.fn(),
   getScoreExportOptions: vi.fn(),
@@ -36,7 +35,6 @@ vi.mock('react-router-dom', async () => {
 });
 
 const mockGetDashboard = getDashboard as Mock;
-const mockExportDashboard = exportDashboard as Mock;
 const mockDownloadDashboardFile = downloadDashboardFile as Mock;
 const mockExportScores = exportScores as Mock;
 const mockGetScoreExportOptions = getScoreExportOptions as Mock;
@@ -109,7 +107,6 @@ const renderDashboard = (data: StudentDashboardData | TeacherDashboardData | Adm
 describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockExportDashboard.mockResolvedValue({ data: new Blob(['file']), headers: {} });
     mockGetScoreExportOptions.mockResolvedValue({
       data: {
         classes: [{ id: 1, name: '计科2401班' }],
@@ -139,7 +136,7 @@ describe('Dashboard', () => {
   ] as const)('renders only the charts for the current role', async (data, labels) => {
     renderDashboard(data);
 
-    expect(await screen.findByText('导出数据')).toBeInTheDocument();
+    expect(await screen.findByText('成绩明细导出')).toBeInTheDocument();
     labels.forEach((label) => expect(screen.getByRole('img', { name: label })).toBeInTheDocument());
     const chartLabels = [
       '最近成绩与及格线图表',
@@ -171,51 +168,11 @@ describe('Dashboard', () => {
     expect(screen.queryByRole('img', { name: '最近考试时间线图表' })).not.toBeInTheDocument();
   });
 
-  it('exports CSV summary and all Excel sheets with independent loading state', async () => {
-    let resolveExport: ((value: unknown) => void) | undefined;
-    mockExportDashboard.mockImplementation(
-      () => new Promise((resolve) => { resolveExport = resolve; })
-    );
-    renderDashboard(studentData);
-
-    const exportButton = await screen.findByRole('button', { name: /导出数据/ });
-    fireEvent.click(exportButton);
-    fireEvent.click(await screen.findByText('导出 CSV 概览'));
-
-    expect(mockExportDashboard).toHaveBeenCalledWith('csv', 'summary');
-    expect(exportButton).toBeDisabled();
-
-    const response = { data: new Blob(['csv']), headers: {} };
-    resolveExport?.(response);
-    await waitFor(() => expect(mockDownloadDashboardFile).toHaveBeenCalledWith(response, '仪表盘概览.csv'));
-
-    fireEvent.click(exportButton);
-    fireEvent.click(await screen.findByText('导出 Excel 全部数据'));
-    expect(mockExportDashboard).toHaveBeenCalledWith('xlsx', undefined);
-  });
-
-  it('shows an error and restores the export button when download fails', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    mockExportDashboard.mockRejectedValue(new Error('network error'));
-    renderDashboard(adminData);
-
-    const exportButton = await screen.findByRole('button', { name: /导出数据/ });
-    fireEvent.click(exportButton);
-    fireEvent.click(await screen.findByText('导出 CSV 概览'));
-
-    expect(await screen.findByText('导出仪表盘数据失败')).toBeInTheDocument();
-    await waitFor(() => expect(exportButton).not.toBeDisabled());
-    expect(mockDownloadDashboardFile).not.toHaveBeenCalled();
-    error.mockRestore();
-  });
-
   it('opens the score export modal and downloads filtered data for teacher', async () => {
     mockExportScores.mockResolvedValue({ data: new Blob(['xlsx']), headers: {} });
     renderDashboard(teacherData);
 
-    const exportButton = await screen.findByRole('button', { name: /导出数据/ });
-    fireEvent.click(exportButton);
-    fireEvent.click(await screen.findByText('成绩明细导出'));
+    fireEvent.click(await screen.findByRole('button', { name: /成绩明细导出/ }));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     fireEvent.mouseDown(screen.getAllByText('请选择班级')[0].closest('.ant-select-content') as Element);
@@ -235,12 +192,24 @@ describe('Dashboard', () => {
     );
   });
 
-  it('hides the score export menu item for students', async () => {
+  it('hides the score export entry for students', async () => {
     renderDashboard(studentData);
 
-    fireEvent.click(await screen.findByRole('button', { name: /导出数据/ }));
+    await screen.findByRole('button', { name: /去参加/ });
 
-    expect(screen.queryByText('成绩明细导出')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /成绩明细导出/ })).not.toBeInTheDocument();
+  });
+
+  it('shows an error when score export fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockExportScores.mockRejectedValue(new Error('network error'));
+    renderDashboard(teacherData);
+
+    fireEvent.click(await screen.findByRole('button', { name: /成绩明细导出/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^导\s*出$/ }));
+
+    expect(await screen.findByText('导出成绩明细失败')).toBeInTheDocument();
+    error.mockRestore();
   });
 
   it('shows an error when score export options fail to load', async () => {
@@ -248,9 +217,7 @@ describe('Dashboard', () => {
     mockGetScoreExportOptions.mockRejectedValue(new Error('network error'));
     renderDashboard(teacherData);
 
-    const exportButton = await screen.findByRole('button', { name: /导出数据/ });
-    fireEvent.click(exportButton);
-    fireEvent.click(await screen.findByText('成绩明细导出'));
+    fireEvent.click(await screen.findByRole('button', { name: /成绩明细导出/ }));
 
     expect(await screen.findByText('获取导出选项失败')).toBeInTheDocument();
     error.mockRestore();

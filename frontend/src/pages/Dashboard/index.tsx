@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { App, Row, Col, Card, Statistic, Button, Dropdown, Modal, Select, Space } from 'antd';
-import type { MenuProps } from 'antd';
+import { App, Row, Col, Card, Statistic, Button, Modal, Select, Space } from 'antd';
 import {
   FileTextOutlined,
   CheckCircleOutlined,
@@ -10,11 +9,10 @@ import {
   TeamOutlined,
   AuditOutlined,
   UserOutlined,
-  DownloadOutlined,
   FileExcelOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { exportDashboard, exportScores, getDashboard, getScoreExportOptions } from '../../api/statistics';
+import { exportScores, getDashboard, getScoreExportOptions } from '../../api/statistics';
 import type { DashboardData } from '../../types/dashboard';
 import type { ScoreExportOptions } from '../../types/scoreExport';
 import dayjs from 'dayjs';
@@ -49,7 +47,6 @@ const Dashboard = () => {
   const user = useAuthStore((state) => state.user);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [exporting, setExporting] = useState<'csv' | 'xlsx' | null>(null);
   const [scoreModalOpen, setScoreModalOpen] = useState(false);
   const [scoreOptions, setScoreOptions] = useState<ScoreExportOptions | null>(null);
   const [scoreClassId, setScoreClassId] = useState<number | undefined>();
@@ -96,24 +93,6 @@ const Dashboard = () => {
   const isStudent = data.role === 'student';
   const isTeacher = data.role === 'teacher';
 
-  const handleExport = async (format: 'csv' | 'xlsx') => {
-    setExporting(format);
-    try {
-      const response = await exportDashboard(
-        format,
-        format === 'csv' ? 'summary' : undefined
-      );
-      downloadDashboardFile(
-        response,
-        format === 'csv' ? '仪表盘概览.csv' : '仪表盘全部数据.xlsx'
-      );
-    } catch (error) {
-      message.error('导出仪表盘数据失败');
-    } finally {
-      setExporting(null);
-    }
-  };
-
   const openScoreExport = async () => {
     setScoreModalOpen(true);
     if (scoreOptions) return;
@@ -137,38 +116,17 @@ const Dashboard = () => {
     }
   };
 
-  const exportItems: MenuProps['items'] = [
-    { key: 'csv', icon: <FileTextOutlined />, label: '导出 CSV 概览' },
-    { key: 'xlsx', icon: <FileExcelOutlined />, label: '导出 Excel 全部数据' },
-    ...(isStudent
-      ? []
-      : [{ key: 'scores', icon: <FileExcelOutlined />, label: '成绩明细导出' }]),
-  ];
-
   return (
     <div className="dashboard">
       <div className="dashboard-toolbar">
-        <Dropdown
-          menu={{
-            items: exportItems,
-            onClick: ({ key }) => {
-              if (key === 'scores') {
-                openScoreExport();
-              } else {
-                handleExport(key as 'csv' | 'xlsx');
-              }
-            },
-          }}
-          trigger={['click']}
+        <Button
+          icon={<FileExcelOutlined />}
+          loading={scoreExporting}
+          onClick={openScoreExport}
+          hidden={isStudent}
         >
-          <Button
-            icon={<DownloadOutlined />}
-            loading={exporting !== null}
-            disabled={exporting !== null}
-          >
-            导出数据
-          </Button>
-        </Dropdown>
+          成绩明细导出
+        </Button>
       </div>
       <Modal
         title="成绩明细导出"
