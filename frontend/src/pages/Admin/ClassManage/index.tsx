@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { App, Table, Button, Modal, Form, Input, Space, Popconfirm } from 'antd';
+import { App, Table, Button, Modal, Form, Input, Space, Popconfirm, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined } from '@ant-design/icons';
 import { getClasses, createClass, updateClass, deleteClass } from '../../../api/classes';
@@ -93,14 +93,20 @@ const ClassManage = () => {
     { title: '年级', dataIndex: 'grade', key: 'grade', width: 120, align: 'center' },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true, align: 'center' },
     {
-      title: '操作', key: 'action', width: 240, fixed: 'right' as const, align: 'center',
+      title: '操作', key: 'action', width: 140, fixed: 'right' as const, align: 'center',
       render: (_, record) => (
-        <Space>
-          <Button type="link" icon={<TeamOutlined />} onClick={() => setStudentsDrawer(record)}>学生</Button>
-          <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
-          <Popconfirm title="确认删除该班级？" onConfirm={() => handleDelete(record.id)}>
-            <Button type="link" danger icon={<DeleteOutlined />}>删除</Button>
-          </Popconfirm>
+        <Space size={4}>
+          <Tooltip title="管理学生">
+            <Button type="link" icon={<TeamOutlined />} aria-label="管理学生" onClick={() => setStudentsDrawer(record)} />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <Button type="link" icon={<EditOutlined />} aria-label="编辑" onClick={() => handleEdit(record)} />
+          </Tooltip>
+          <Tooltip title="删除">
+            <Popconfirm title="确认删除该班级？" onConfirm={() => handleDelete(record.id)}>
+              <Button type="link" danger icon={<DeleteOutlined />} aria-label="删除" />
+            </Popconfirm>
+          </Tooltip>
         </Space>
       ),
     },
@@ -122,6 +128,7 @@ const ClassManage = () => {
             columns={columns}
             dataSource={classes}
             loading={loading}
+            scroll={{ x: 900 }}
             pagination={{
               current: page, pageSize, total,
               showSizeChanger: true,

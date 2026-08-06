@@ -75,33 +75,14 @@ describe('UserManage', () => {
     fireEvent.click(screen.getByTitle('2'));
 
     await waitFor(() => {
-      expect(mockGetUsers).toHaveBeenLastCalledWith({ page: 2, page_size: 10 });
+      expect(mockGetUsers).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, page_size: 10 })
+      );
     });
     expect(await screen.findByText('demo_student_11')).toBeInTheDocument();
   });
 
-  it('选择角色筛选后按 role 重新请求', async () => {
-    const firstPage = Array.from({ length: 3 }, (_, i) => makeUser(i + 1));
-    mockGetUsers.mockResolvedValue(paginated(firstPage, 3));
-
-    render(
-      <App>
-        <UserManage />
-      </App>
-    );
-
-    await screen.findByText('demo_student_1');
-    fireEvent.mouseDown(document.querySelector('.ant-select') as HTMLElement);
-    fireEvent.click(await screen.findByTitle('学生'));
-
-    await waitFor(() => {
-      expect(mockGetUsers).toHaveBeenLastCalledWith(
-        expect.objectContaining({ role: 'student' })
-      );
-    });
-  });
-
-  it('选择班级筛选后按 class_id 重新请求并重置页码', async () => {
+  it('切换角色筛选后按 role 重新请求', async () => {
     const firstPage = Array.from({ length: 3 }, (_, i) => makeUser(i + 1));
     mockGetUsers.mockResolvedValue(paginated(firstPage, 3));
 
@@ -113,24 +94,16 @@ describe('UserManage', () => {
 
     await screen.findByText('demo_student_1');
     fireEvent.mouseDown(document.querySelectorAll('.ant-select')[0] as HTMLElement);
-    fireEvent.click(await screen.findByTitle('学生'));
-    await waitFor(() => {
-      expect(
-        document.querySelectorAll('.ant-select')[1].className
-      ).not.toContain('ant-select-disabled');
-    });
-
-    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[1] as HTMLElement);
-    fireEvent.click(await screen.findByTitle('计科2401'));
+    fireEvent.click(await screen.findByTitle('教师'));
 
     await waitFor(() => {
       expect(mockGetUsers).toHaveBeenLastCalledWith(
-        expect.objectContaining({ role: 'student', class_id: 1 })
+        expect.objectContaining({ role: 'teacher' })
       );
     });
   });
 
-  it('仅选择学生角色时班级筛选可用，其他角色下禁用', async () => {
+  it('班级筛选仅学生角色可用，切换其他角色后禁用', async () => {
     const firstPage = Array.from({ length: 3 }, (_, i) => makeUser(i + 1));
     mockGetUsers.mockResolvedValue(paginated(firstPage, 3));
 
@@ -141,17 +114,10 @@ describe('UserManage', () => {
     );
 
     await screen.findByText('demo_student_1');
-    const classSelect = document.querySelectorAll('.ant-select')[1];
-    expect(classSelect.className).toContain('ant-select-disabled');
-
-    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[0] as HTMLElement);
-    fireEvent.click(await screen.findByTitle('学生'));
-
-    await waitFor(() => {
-      expect(
-        document.querySelectorAll('.ant-select')[1].className
-      ).not.toContain('ant-select-disabled');
-    });
+    // 默认按学生筛选：班级筛选初始即可用
+    expect(
+      document.querySelectorAll('.ant-select')[1].className
+    ).not.toContain('ant-select-disabled');
 
     fireEvent.mouseDown(document.querySelectorAll('.ant-select')[0] as HTMLElement);
     fireEvent.click(await screen.findByTitle('教师'));
@@ -178,14 +144,7 @@ describe('UserManage', () => {
 
     await screen.findByText('demo_student_1');
 
-    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[0] as HTMLElement);
-    fireEvent.click(await screen.findByTitle('学生'));
-    await waitFor(() => {
-      expect(
-        document.querySelectorAll('.ant-select')[1].className
-      ).not.toContain('ant-select-disabled');
-    });
-
+    // 默认已选学生角色，直接选班级
     fireEvent.mouseDown(document.querySelectorAll('.ant-select')[1] as HTMLElement);
     fireEvent.click(await screen.findByTitle('计科2401'));
     await waitFor(() => {
