@@ -88,12 +88,12 @@ const ClassManage = () => {
   };
 
   const columns: ColumnsType<Class> = [
-    { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
-    { title: '班级名称', dataIndex: 'name', key: 'name' },
-    { title: '年级', dataIndex: 'grade', key: 'grade', width: 120 },
-    { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
+    { title: 'ID', dataIndex: 'id', key: 'id', width: 60, align: 'center' },
+    { title: '班级名称', dataIndex: 'name', key: 'name', align: 'center' },
+    { title: '年级', dataIndex: 'grade', key: 'grade', width: 120, align: 'center' },
+    { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true, align: 'center' },
     {
-      title: '操作', key: 'action', width: 240, fixed: 'right' as const,
+      title: '操作', key: 'action', width: 240, fixed: 'right' as const, align: 'center',
       render: (_, record) => (
         <Space>
           <Button type="link" icon={<TeamOutlined />} onClick={() => setStudentsDrawer(record)}>学生</Button>

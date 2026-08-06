@@ -66,6 +66,10 @@ const UserManage = () => {
 
   const handleRoleFilterChange = (value: UserRole | undefined) => {
     setRoleFilter(value);
+    // 班级筛选仅对学生角色有意义，切换为其他角色时清空已选班级
+    if (value !== 'student') {
+      setClassFilter(undefined);
+    }
     setPage(1);
   };
 
@@ -182,6 +186,7 @@ const UserManage = () => {
             style={{ width: 180 }}
             value={classFilter}
             onChange={handleClassFilterChange}
+            disabled={roleFilter !== 'student'}
             options={[
               { value: -1, label: '未分配班级' },
               ...classes.map((c) => ({ value: c.id, label: c.name })),

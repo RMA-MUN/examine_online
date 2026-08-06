@@ -112,13 +112,94 @@ describe('UserManage', () => {
     );
 
     await screen.findByText('demo_student_1');
-    const selects = document.querySelectorAll('.ant-select');
-    fireEvent.mouseDown(selects[1] as HTMLElement);
+    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[0] as HTMLElement);
+    fireEvent.click(await screen.findByTitle('学生'));
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll('.ant-select')[1].className
+      ).not.toContain('ant-select-disabled');
+    });
+
+    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[1] as HTMLElement);
     fireEvent.click(await screen.findByTitle('计科2401'));
 
     await waitFor(() => {
       expect(mockGetUsers).toHaveBeenLastCalledWith(
+        expect.objectContaining({ role: 'student', class_id: 1 })
+      );
+    });
+  });
+
+  it('仅选择学生角色时班级筛选可用，其他角色下禁用', async () => {
+    const firstPage = Array.from({ length: 3 }, (_, i) => makeUser(i + 1));
+    mockGetUsers.mockResolvedValue(paginated(firstPage, 3));
+
+    render(
+      <App>
+        <UserManage />
+      </App>
+    );
+
+    await screen.findByText('demo_student_1');
+    const classSelect = document.querySelectorAll('.ant-select')[1];
+    expect(classSelect.className).toContain('ant-select-disabled');
+
+    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[0] as HTMLElement);
+    fireEvent.click(await screen.findByTitle('学生'));
+
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll('.ant-select')[1].className
+      ).not.toContain('ant-select-disabled');
+    });
+
+    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[0] as HTMLElement);
+    fireEvent.click(await screen.findByTitle('教师'));
+
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll('.ant-select')[1].className
+      ).toContain('ant-select-disabled');
+    });
+    expect(mockGetUsers).toHaveBeenLastCalledWith(
+      expect.objectContaining({ role: 'teacher', class_id: undefined })
+    );
+  });
+
+  it('从学生切换到其他角色时清空已选班级', async () => {
+    const firstPage = Array.from({ length: 3 }, (_, i) => makeUser(i + 1));
+    mockGetUsers.mockResolvedValue(paginated(firstPage, 3));
+
+    render(
+      <App>
+        <UserManage />
+      </App>
+    );
+
+    await screen.findByText('demo_student_1');
+
+    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[0] as HTMLElement);
+    fireEvent.click(await screen.findByTitle('学生'));
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll('.ant-select')[1].className
+      ).not.toContain('ant-select-disabled');
+    });
+
+    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[1] as HTMLElement);
+    fireEvent.click(await screen.findByTitle('计科2401'));
+    await waitFor(() => {
+      expect(mockGetUsers).toHaveBeenLastCalledWith(
         expect.objectContaining({ class_id: 1 })
+      );
+    });
+
+    fireEvent.mouseDown(document.querySelectorAll('.ant-select')[0] as HTMLElement);
+    fireEvent.click(await screen.findByTitle('教师'));
+
+    await waitFor(() => {
+      expect(mockGetUsers).toHaveBeenLastCalledWith(
+        expect.objectContaining({ role: 'teacher', class_id: undefined })
       );
     });
   });
