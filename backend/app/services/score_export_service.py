@@ -55,14 +55,6 @@ _CHINESE_HEADERS = {
     "full_score": "满分",
 }
 
-_QUESTION_TYPE_TEXT = {
-    "single": "单选",
-    "multiple": "多选",
-    "judge": "判断",
-    "blank": "填空",
-    "essay": "简答",
-}
-
 _STATUS_TEXT = {"submitted": "待阅卷", "graded": "已阅卷"}
 
 _NO_CLASS = "未分配班级"
@@ -213,38 +205,41 @@ async def get_score_export_options(db: AsyncSession, user: User) -> dict:
     }
 
 
+def _student_detail_columns(rows: list[dict]) -> list[str]:
+    """宽表列：固定列 + 行键中的 q<数字> 列按数字升序。"""
+    q_keys = sorted(
+        {key for row in rows for key in row if key.startswith("q") and key[1:].isdigit()},
+        key=lambda key: int(key[1:]),
+    )
+    return STUDENT_DETAIL_BASE_COLUMNS + q_keys
+
+
 def render_score_export(datasets: dict[str, list[dict]]) -> tuple[bytes, str, str]:
-    """将成绩导出数据集渲染为三 Sheet 的 xlsx 文件。
+    """将成绩导出数据集渲染为两 Sheet 的 xlsx 文件。
     :return: 元组 (文件字节内容, MIME 类型, 文件名)
     """
     workbook = Workbook()
     workbook.remove(workbook.active)
-    question_headers = {**_CHINESE_HEADERS, "score": "得分"}
-    sheet_specs = [
-        ("class_summary", "班级成绩汇总", CLASS_SUMMARY_COLUMNS, _CHINESE_HEADERS),
-        ("student_scores", "学生成绩", STUDENT_DETAIL_BASE_COLUMNS, _CHINESE_HEADERS),
-        (
-            "question_details",
-            "题目得分明细",
-            [
-                "student_name",
-                "class_name",
-                "course_name",
-                "exam_title",
-                "question_no",
-                "question_type",
-                "score",
-                "full_score",
-            ],
-            question_headers,
-        ),
-    ]
-    for name, sheet_title, columns, headers in sheet_specs:
-        sheet = workbook.create_sheet(sheet_title)
-        sheet.append([headers[column] for column in columns])
-        sheet.freeze_panes = "A2"
-        for row in datasets[name]:
-            sheet.append([row.get(column) for column in columns])
+
+    detail_rows = datasets["student_detail"]
+    detail_columns = _student_detail_columns(detail_rows)
+    sheet = workbook.create_sheet("成绩明细")
+    sheet.append(
+        [
+            _CHINESE_HEADERS.get(column, f"题{column[1:]}")
+            for column in detail_columns
+        ]
+    )
+    sheet.freeze_panes = "A2"
+    for row in detail_rows:
+        sheet.append([row.get(column) for column in detail_columns])
+
+    summary_sheet = workbook.create_sheet("班级成绩汇总")
+    summary_sheet.append([_CHINESE_HEADERS[column] for column in CLASS_SUMMARY_COLUMNS])
+    summary_sheet.freeze_panes = "A2"
+    for row in datasets["class_summary"]:
+        summary_sheet.append([row.get(column) for column in CLASS_SUMMARY_COLUMNS])
+
     output = BytesIO()
     workbook.save(output)
     return (

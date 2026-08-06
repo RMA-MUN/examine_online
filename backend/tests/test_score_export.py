@@ -376,7 +376,7 @@ async def test_teacher_get_options_limits_courses_to_assigned():
     assert options["courses"] == [{"id": 1, "name": "数学"}]
 
 
-def test_render_creates_three_sheets_with_chinese_headers():
+def test_render_creates_two_sheets_with_wide_detail_and_summary():
     datasets = {
         "class_summary": [
             {
@@ -390,7 +390,7 @@ def test_render_creates_three_sheets_with_chinese_headers():
                 "min_score": 55,
             }
         ],
-        "student_scores": [
+        "student_detail": [
             {
                 "student_name": "小明",
                 "class_name": "一班",
@@ -399,18 +399,8 @@ def test_render_creates_three_sheets_with_chinese_headers():
                 "score": 80,
                 "pass_score": 60,
                 "status": "已阅卷",
-            }
-        ],
-        "question_details": [
-            {
-                "student_name": "小明",
-                "class_name": "一班",
-                "course_name": "数学",
-                "exam_title": "期中考试",
-                "question_no": 1,
-                "question_type": "简答",
-                "score": 4,
-                "full_score": 5,
+                "q1": 4,
+                "q2": 3,
             }
         ],
     }
@@ -420,46 +410,34 @@ def test_render_creates_three_sheets_with_chinese_headers():
     assert media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert filename == "score-export.xlsx"
     workbook = load_workbook(BytesIO(content), read_only=True)
-    assert workbook.sheetnames == ["班级成绩汇总", "学生成绩", "题目得分明细"]
+    assert workbook.sheetnames == ["成绩明细", "班级成绩汇总"]
+    assert list(workbook["成绩明细"].values) == [
+        ("学生姓名", "班级", "科目", "考试", "总分", "及格线", "状态", "题1", "题2"),
+        ("小明", "一班", "数学", "期中考试", 80, 60, "已阅卷", 4, 3),
+    ]
     assert list(workbook["班级成绩汇总"].values) == [
         ("班级", "科目", "考试", "参考人数", "平均分", "及格率", "最高分", "最低分"),
         ("一班", "数学", "期中考试", 2, 67.5, 50.0, 80, 55),
     ]
-    assert list(workbook["学生成绩"].values)[0] == (
-        "学生姓名",
-        "班级",
-        "科目",
-        "考试",
-        "总分",
-        "及格线",
-        "状态",
-    )
-    assert list(workbook["题目得分明细"].values)[0] == (
-        "学生姓名",
-        "班级",
-        "科目",
-        "考试",
-        "题号",
-        "题型",
-        "得分",
-        "满分",
-    )
+    editable = load_workbook(BytesIO(content))
+    assert editable["成绩明细"].freeze_panes == "A2"
+    assert editable["班级成绩汇总"].freeze_panes == "A2"
 
 
 def test_render_keeps_headers_when_datasets_empty():
     datasets = {
         "class_summary": [],
-        "student_scores": [],
-        "question_details": [],
+        "student_detail": [],
     }
 
     content, _, _ = render_score_export(datasets)
 
     workbook = load_workbook(BytesIO(content), read_only=True)
-    assert list(workbook["班级成绩汇总"].values) == [
-        ("班级", "科目", "考试", "参考人数", "平均分", "及格率", "最高分", "最低分")
+    assert list(workbook["成绩明细"].values) == [
+        ("学生姓名", "班级", "科目", "考试", "总分", "及格线", "状态")
     ]
-    assert workbook["学生成绩"].max_row == 1
+    assert workbook["成绩明细"].max_row == 1
+    assert workbook["班级成绩汇总"].max_row == 1
 
 
 @pytest.mark.asyncio
