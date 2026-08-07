@@ -58,11 +58,19 @@
   animation: login-side-in 0.7s 0.16s var(--ease-out) both;
 }
 
+:root[data-theme='dark'] .login-brand {
+  background: linear-gradient(160deg, #2b4361 0%, #21344b 55%, #131c26 100%);
+}
+
+/*
+ * 装饰环：此前是两个正圆 + 均匀描边绕自身中心旋转，
+ * 视觉上完全静止（纯粹空转合成器）。改为虚线环 + 偏心光晕，
+ * 旋转才真正可见，同时保留原来的低调气质。
+ */
 .login-brand::before,
 .login-brand::after {
   content: '';
   position: absolute;
-  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -72,7 +80,8 @@
   bottom: -70px;
   width: 280px;
   height: 280px;
-  animation: login-float 40s linear infinite;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  animation: login-float 48s linear infinite;
 }
 
 .login-brand::after {
@@ -80,7 +89,14 @@
   bottom: 30px;
   width: 160px;
   height: 160px;
-  animation: login-float 40s linear infinite reverse;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  /* 偏心高光让旋转产生可感知的位移 */
+  background: radial-gradient(
+    circle at 30% 30%,
+    rgba(255, 255, 255, 0.12),
+    transparent 60%
+  );
+  animation: login-float 36s linear infinite reverse;
 }
 
 @keyframes login-float {
@@ -161,12 +177,16 @@
   box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.15);
 }
 
+:root[data-theme='dark'] .login-form-inner .ant-input-affix-wrapper:focus-within {
+  box-shadow: 0 0 0 3px rgba(107, 158, 207, 0.22);
+}
+
 .login-submit {
   margin-top: 8px;
   height: 44px;
   border-radius: 8px;
   font-weight: 500;
-  background: linear-gradient(135deg, #3d5a80, #2c4460);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-active));
   box-shadow: 0 4px 12px rgba(61, 90, 128, 0.35);
   position: relative;
   overflow: hidden;

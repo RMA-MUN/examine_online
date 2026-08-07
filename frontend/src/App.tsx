@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { App as AntdApp, ConfigProvider } from 'antd';
+import { App as AntdApp, ConfigProvider, theme as antdTheme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import Login from './pages/Login';
 import AppLayout from './components/Layout';
 import useAuthStore from './store/auth';
+import useThemeStore, { applyThemeMode } from './store/theme';
 
 // 管理员页面
 import UserManage from './pages/Admin/UserManage';
@@ -43,6 +44,8 @@ const ExamsPage = () => {
 
 function App() {
   const { fetchUser, token } = useAuthStore();
+  const mode = useThemeStore((state) => state.mode);
+  const isDark = mode === 'dark';
 
   useEffect(() => {
     if (token) {
@@ -50,37 +53,43 @@ function App() {
     }
   }, [token, fetchUser]);
 
+  // store 初始化时已确定 mode，这里把它同步到 <html> 上驱动 CSS 变量
+  useEffect(() => {
+    applyThemeMode(mode);
+  }, [mode]);
+
   return (
     <ConfigProvider
       locale={zhCN}
       theme={{
+        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
-          colorPrimary: '#3D5A80',
-          colorInfo: '#3D5A80',
-          colorSuccess: '#52C41A',
-          colorWarning: '#FAAD14',
-          colorError: '#FF4D4F',
-          colorTextBase: '#1A2332',
-          colorBgBase: '#FFFFFF',
-          colorBgLayout: '#F0F2F5',
-          colorBorder: '#E4E8EE',
+          colorPrimary: isDark ? '#6B9ECF' : '#3D5A80',
+          colorInfo: isDark ? '#6B9ECF' : '#3D5A80',
+          colorSuccess: isDark ? '#4CAF6D' : '#52C41A',
+          colorWarning: isDark ? '#E0A030' : '#FAAD14',
+          colorError: isDark ? '#E06A58' : '#FF4D4F',
+          colorTextBase: isDark ? '#E8EDF3' : '#1A2332',
+          colorBgBase: isDark ? '#1E2A3A' : '#FFFFFF',
+          colorBgLayout: isDark ? '#16202C' : '#F0F2F5',
+          colorBorder: isDark ? '#33455C' : '#E4E8EE',
           borderRadius: 8,
           fontFamily:
             "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif",
         },
         components: {
           Layout: {
-            siderBg: '#1A2332',
-            headerBg: '#FFFFFF',
+            siderBg: isDark ? '#131C26' : '#1A2332',
+            headerBg: isDark ? '#1E2A3A' : '#FFFFFF',
             headerHeight: 64,
-            bodyBg: '#F0F2F5',
+            bodyBg: isDark ? '#16202C' : '#F0F2F5',
           },
           Menu: {
-            darkItemBg: '#1A2332',
-            darkItemColor: '#8B9BB4',
-            darkItemHoverBg: '#2A3A4E',
+            darkItemBg: isDark ? '#131C26' : '#1A2332',
+            darkItemColor: isDark ? '#94A6BC' : '#8B9BB4',
+            darkItemHoverBg: isDark ? '#24344A' : '#2A3A4E',
             darkItemHoverColor: '#FFFFFF',
-            darkItemSelectedBg: '#3D5A80',
+            darkItemSelectedBg: isDark ? '#3A6FA5' : '#3D5A80',
             darkItemSelectedColor: '#FFFFFF',
             itemBorderRadius: 8,
             itemMarginInline: 8,
@@ -90,7 +99,10 @@ function App() {
           Input: { borderRadius: 8, borderRadiusLG: 8, borderRadiusSM: 6 },
           Select: { borderRadius: 8, borderRadiusLG: 8, borderRadiusSM: 6 },
           Modal: { borderRadiusLG: 16 },
-          Table: { headerBg: '#f7f9fb', headerSplitColor: '#E4E8EE' },
+          Table: {
+            headerBg: isDark ? '#24313F' : '#f7f9fb',
+            headerSplitColor: isDark ? '#33455C' : '#E4E8EE',
+          },
           Tag: { borderRadiusSM: 6 },
         },
       }}

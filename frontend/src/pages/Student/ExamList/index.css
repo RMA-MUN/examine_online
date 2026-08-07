@@ -36,6 +36,11 @@
   color: #fff;
 }
 
+/* 封面色由标题哈希决定，暗色下整体压暗避免过亮 */
+:root[data-theme='dark'] .exam-card-cover {
+  filter: brightness(0.82) saturate(0.9);
+}
+
 .exam-card-initial {
   font-size: 34px;
   font-weight: 700;
@@ -90,6 +95,7 @@
 
 .exam-list-empty-card {
   background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }

@@ -4,6 +4,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { getPaper, saveAnswers, submitExam, recordSwitch } from '../../../api/exams';
 import QuestionRenderer from '../../../components/QuestionRenderer';
 import PageCard from '../../../components/PageCard';
+import EmptyState from '../../../components/EmptyState';
 import type { Paper } from '../../../types/record';
 import type { AnswerValue } from '../../../types/answer';
 import type { QuestionType } from '../../../types/question';
@@ -124,12 +125,15 @@ const ExamTaking = () => {
   if (!paper) {
     if (loadError) {
       return (
-        <div style={{ padding: 48, textAlign: 'center' }}>
-          <p style={{ marginBottom: 16 }}>{loadError}</p>
-          <Button type="primary" onClick={() => navigate(-1)}>
-            返回
-          </Button>
-        </div>
+        <EmptyState
+          title="无法进入考试"
+          description={loadError}
+          action={
+            <Button type="primary" onClick={() => navigate(-1)}>
+              返回
+            </Button>
+          }
+        />
       );
     }
     return null;

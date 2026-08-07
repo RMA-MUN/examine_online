@@ -10,3 +10,9 @@
 .page-card:hover {
   box-shadow: var(--shadow-card-hover);
 }
+
+/* 抽屉内的答题卡：逐题堆叠，去掉悬停位移以免长列表跳动 */
+.answer-card {
+  margin-bottom: 16px;
+  padding: 16px;
+}

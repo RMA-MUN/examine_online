@@ -5,21 +5,43 @@
 }
 
 .dashboard-banner {
+  position: relative;
   padding: 32px;
   margin-bottom: 16px;
   border-radius: var(--radius-card);
   color: #fff;
   background: linear-gradient(135deg, #3d5a80, #2c4460);
   box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+/* 暗色下横幅同步压暗，否则在深色页面上过亮、像一块贴片 */
+:root[data-theme='dark'] .dashboard-banner {
+  background: linear-gradient(135deg, #2b4361, #1d2f45);
+}
+
+/* 右侧柔光，给纯色横幅一点纵深 */
+.dashboard-banner::after {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -40px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.13), transparent 68%);
+  pointer-events: none;
 }
 
 .dashboard-banner-title {
+  position: relative;
   margin: 0 0 8px;
   font-size: 24px;
   font-weight: 600;
 }
 
 .dashboard-banner-subtitle {
+  position: relative;
   margin: 0;
   font-size: 14px;
   color: rgba(255, 255, 255, 0.8);
@@ -27,10 +49,6 @@
 
 .dashboard-stats {
   margin-bottom: 4px;
-}
-
-.stat-card .ant-card-body {
-  padding: 20px 24px;
 }
 
 .dashboard-section {
@@ -62,6 +80,10 @@
   min-width: 0;
 }
 
+/*
+ * 图表容器不写死高度：固定高度会把旋转后的中文 x 轴标签挤到容器外，
+ * 卡片内部出现小滚动条。这里给最小高度，由 ECharts 的 containLabel 撑开余量。
+ */
 .dashboard-chart {
   width: 100%;
   height: 320px;
@@ -86,11 +108,13 @@
   padding: 14px 16px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  transition: box-shadow 0.3s var(--ease-out), transform 0.3s var(--ease-out);
+  transition: box-shadow 0.3s var(--ease-out), transform 0.3s var(--ease-out),
+    border-color 0.3s var(--ease-out);
 }
 
 .dashboard-list-item:hover {
   transform: translateY(-1px);
+  border-color: var(--color-primary);
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -138,7 +162,7 @@
   display: block;
   height: 100%;
   border-radius: 4px;
-  background: linear-gradient(90deg, #3d5a80, #4a6b94);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
   transition: width 0.6s var(--ease-out);
 }
 
@@ -149,14 +173,37 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-charts-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 767px) {
-  .dashboard-charts {
+  .dashboard-charts,
+  .dashboard-charts-three {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .dashboard-chart {
     height: 300px;
+  }
+
+  .dashboard-banner {
+    padding: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-list-item,
+  .dashboard-bar-fill {
+    transition: none;
+  }
+
+  .dashboard-list-item:hover {
+    transform: none;
   }
 }

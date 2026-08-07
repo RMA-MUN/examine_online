@@ -4,6 +4,11 @@
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 12px;
+  padding: 14px 18px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 .exam-taking-info {
@@ -26,6 +31,7 @@
 .exam-taking-timer {
   font-size: 18px;
   font-weight: 700;
+  /* 倒计时逐秒变化，等宽数字避免数字宽度抖动 */
   font-variant-numeric: tabular-nums;
   color: var(--color-primary);
 }
@@ -52,7 +58,7 @@
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: linear-gradient(90deg, #3d5a80, #4a6b94);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
   transition: width 0.4s var(--ease-out);
 }
 
@@ -88,7 +94,6 @@
   cursor: pointer;
   transition: all 0.2s ease;
 }
-
 .exam-taking-nav-item:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
@@ -102,7 +107,7 @@
 
 .exam-taking-nav-item.is-active {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.2);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
   font-weight: 700;
 }
 

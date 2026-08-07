@@ -1,0 +1,93 @@
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 100%;
+  padding: 18px 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.3s var(--ease-out), transform 0.3s var(--ease-out);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.stat-card-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  font-size: 19px;
+}
+
+.stat-card-body {
+  min-width: 0;
+}
+
+.stat-card-label {
+  margin: 0 0 2px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-card-value {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text);
+  /* 大号数字用比例数字，等宽会让 121 这类数看起来发散 */
+  font-variant-numeric: proportional-nums;
+}
+
+.stat-card-suffix {
+  margin-left: 2px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+/* 徽章配色跟随语义，与图表状态色同源 */
+.stat-card-brand .stat-card-badge {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.stat-card-success .stat-card-badge {
+  background: rgba(46, 158, 107, 0.12);
+  color: #2E9E6B;
+}
+
+.stat-card-warning .stat-card-badge {
+  background: rgba(225, 112, 31, 0.12);
+  color: #E1701F;
+}
+
+.stat-card-danger .stat-card-badge {
+  background: rgba(200, 65, 47, 0.12);
+  color: #C8412F;
+}
+
+:root[data-theme='dark'] .stat-card-danger .stat-card-badge {
+  color: #E06A58;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-card {
+    transition: none;
+  }
+
+  .stat-card:hover {
+    transform: none;
+  }
+}

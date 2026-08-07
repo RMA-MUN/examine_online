@@ -16,6 +16,7 @@ body,
   --color-primary-light: #E8EDF3;
   --color-bg: #F0F2F5;
   --color-surface: #FFFFFF;
+  --color-surface-sunken: #F7F9FB;
   --color-border: #E4E8EE;
   --color-divider: #F0F0F0;
   --color-text: #1A2332;
@@ -29,6 +30,9 @@ body,
   --color-warning: #FAAD14;
   --color-error: #FF4D4F;
   --color-info: #3D5A80;
+  --color-row-hover: #F5F8FC;
+  --color-scroll-thumb: rgba(139, 155, 180, 0.45);
+  --color-scroll-thumb-hover: rgba(107, 123, 141, 0.7);
 
   --radius-control: 8px;
   --radius-card: 12px;
@@ -44,14 +48,45 @@ body,
     'Microsoft YaHei', 'Helvetica Neue', sans-serif;
 }
 
-* {
-  box-sizing: border-box;
+/*
+ * 暗色令牌。
+ * 不是把亮色数值直接反转——暗色下需要更低的饱和度与更高的文本对比：
+ * 主文本 12.3:1、次文本 6.6:1、主色 5.1:1（均已实测）。
+ * 阴影在深色背景上几乎不可见，改由边框承担层次。
+ */
+:root[data-theme='dark'] {
+  --color-primary: #6B9ECF;
+  --color-primary-hover: #82B0DC;
+  --color-primary-active: #4A83BE;
+  --color-primary-light: #24344A;
+  --color-bg: #16202C;
+  --color-surface: #1E2A3A;
+  --color-surface-sunken: #24313F;
+  --color-border: #33455C;
+  --color-divider: #2C3B4F;
+  --color-text: #E8EDF3;
+  --color-text-secondary: #9FB0C4;
+  --color-text-disabled: #6B7B8D;
+  --color-sidebar-bg: #131C26;
+  --color-sidebar-hover: #24344A;
+  --color-sidebar-active: #3A6FA5;
+  --color-sidebar-text: #94A6BC;
+  --color-success: #4CAF6D;
+  --color-warning: #E0A030;
+  --color-error: #E06A58;
+  --color-info: #6B9ECF;
+  --color-row-hover: #253346;
+  --color-scroll-thumb: rgba(148, 166, 188, 0.32);
+  --color-scroll-thumb-hover: rgba(159, 176, 196, 0.55);
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-pop: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 14px 44px rgba(0, 0, 0, 0.52);
 }
 
-html,
-body,
-#root {
-  height: 100%;
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -61,6 +96,7 @@ body {
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s var(--ease-out), color 0.3s var(--ease-out);
 }
 
 code {
@@ -73,14 +109,35 @@ code {
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(139, 155, 180, 0.45);
+  background: var(--color-scroll-thumb);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(107, 123, 141, 0.7);
+  background: var(--color-scroll-thumb-hover);
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Firefox 不支持 ::-webkit-scrollbar，需单独声明 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scroll-thumb) transparent;
+}
+
+/* ---------- 键盘可达性 ---------- */
+/* 仅键盘导航时显示焦点环，鼠标点击不出现 */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.ant-btn:focus-visible,
+.ant-input:focus-visible,
+.ant-select-selector:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* ---------- antd 全局覆盖 ---------- */
@@ -91,7 +148,7 @@ code {
 }
 
 .ant-table-thead > tr > th {
-  background: #f7f9fb !important;
+  background: var(--color-surface-sunken) !important;
   color: var(--color-text-secondary) !important;
   font-weight: 600;
 }
@@ -100,7 +157,7 @@ code {
   transition: background-color 0.2s ease;
 }
 .ant-table-tbody > tr:hover > td {
-  background: #f5f8fc !important;
+  background: var(--color-row-hover) !important;
 }
 
 .ant-btn:active {
@@ -116,35 +173,8 @@ code {
   border-radius: var(--radius-control) !important;
 }
 
-/* ---------- 通用工具类 ---------- */
-.page-transition {
-  animation: page-in 0.3s var(--ease-out) both;
-}
-@keyframes page-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .page-transition,
-  .ant-card,
-  .ant-btn,
-  .ant-menu-item,
-  .ant-pagination-item,
-  .ant-tag,
-  .ant-form-item-has-error .ant-input,
-  .ant-form-item-has-error .ant-input-affix-wrapper,
-  .ant-form-item-has-error .ant-select-selector {
-    animation: none !important;
-    transition: none !important;
-  }
-}
+/* ---------- 页面切换动画 ---------- */
+/* keyframes 定义在 PageTransition/index.css，此处不重复 */
 
 /* 侧边栏菜单过渡 */
 .ant-menu-item {
@@ -187,5 +217,20 @@ code {
   }
   75% {
     transform: translateX(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition,
+  .ant-card,
+  .ant-btn,
+  .ant-menu-item,
+  .ant-pagination-item,
+  .ant-tag,
+  .ant-form-item-has-error .ant-input,
+  .ant-form-item-has-error .ant-input-affix-wrapper,
+  .ant-form-item-has-error .ant-select-selector {
+    animation: none !important;
+    transition: none !important;
   }
 }

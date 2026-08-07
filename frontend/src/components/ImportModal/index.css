@@ -1,0 +1,20 @@
+/* 导入结果：成功用成功色淡底，错误用错误色文本，均走令牌以适配暗色 */
+.import-result {
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: var(--radius-control);
+  background: rgba(46, 158, 107, 0.1);
+  border: 1px solid rgba(46, 158, 107, 0.24);
+}
+
+.import-result-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.import-error-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--color-error);
+}

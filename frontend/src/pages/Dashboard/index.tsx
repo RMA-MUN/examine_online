@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { App, Row, Col, Card, Statistic, Button, Modal, Select, Space } from 'antd';
+import React, { useEffect, useState, useMemo } from 'react';
+import { App, Row, Col, Button, Modal, Select, Space } from 'antd';
 import {
   FileTextOutlined,
   CheckCircleOutlined,
@@ -17,9 +17,12 @@ import type { DashboardData } from '../../types/dashboard';
 import type { ScoreExportOptions } from '../../types/scoreExport';
 import dayjs from 'dayjs';
 import useAuthStore from '../../store/auth';
+import useThemeStore from '../../store/theme';
+import { getChartTheme } from '../../theme/chartTheme';
 import StatusTag from '../../components/StatusTag';
 import EmptyState from '../../components/EmptyState';
 import PageCard from '../../components/PageCard';
+import StatCard from '../../components/StatCard';
 import SkeletonGrid from '../../components/SkeletonGrid';
 import EChart from '../../components/EChart';
 import { downloadDashboardFile } from '../../utils/dashboardExport';
@@ -45,6 +48,9 @@ const Dashboard = () => {
   const { message } = App.useApp();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const mode = useThemeStore((state) => state.mode);
+  // 主题切换时重建图表配置，让 ECharts 的坐标轴/网格/配色跟着走
+  const chartTheme = useMemo(() => getChartTheme(mode), [mode]);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [scoreModalOpen, setScoreModalOpen] = useState(false);
@@ -184,24 +190,35 @@ const Dashboard = () => {
         <>
           <Row gutter={[16, 16]} className="dashboard-stats">
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="可参加考试" value={data.stats.available_exams} prefix={<FileTextOutlined />} />
-              </Card>
+              <StatCard
+                label="可参加考试"
+                value={data.stats.available_exams}
+                icon={<FileTextOutlined />}
+              />
             </Col>
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="我的考试次数" value={data.stats.my_exam_count} prefix={<HistoryOutlined />} />
-              </Card>
+              <StatCard
+                label="我的考试次数"
+                value={data.stats.my_exam_count}
+                icon={<HistoryOutlined />}
+              />
             </Col>
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="平均分" value={data.stats.avg_score} prefix={<CheckCircleOutlined />} />
-              </Card>
+              <StatCard
+                label="平均分"
+                value={data.stats.avg_score}
+                icon={<CheckCircleOutlined />}
+                tone="success"
+              />
             </Col>
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="通过率" value={data.stats.pass_rate} suffix="%" prefix={<PercentageOutlined />} />
-              </Card>
+              <StatCard
+                label="通过率"
+                value={data.stats.pass_rate}
+                suffix="%"
+                icon={<PercentageOutlined />}
+                tone="success"
+              />
             </Col>
           </Row>
 
@@ -213,7 +230,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildStudentScoreOption(data)}
+                  option={buildStudentScoreOption(data, chartTheme)}
                   ariaLabel="最近成绩与及格线图表"
                 />
               )}
@@ -225,7 +242,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildStudentPassRateOption(data)}
+                  option={buildStudentPassRateOption(data, chartTheme)}
                   ariaLabel="考试通过率图表"
                 />
               )}
@@ -282,24 +299,33 @@ const Dashboard = () => {
         <>
           <Row gutter={[16, 16]} className="dashboard-stats">
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="已发布考试" value={data.stats.published_exams} prefix={<AuditOutlined />} />
-              </Card>
+              <StatCard
+                label="已发布考试"
+                value={data.stats.published_exams}
+                icon={<AuditOutlined />}
+              />
             </Col>
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="待批改题目" value={data.stats.pending_grading_count} prefix={<CheckCircleOutlined />} />
-              </Card>
+              <StatCard
+                label="待批改题目"
+                value={data.stats.pending_grading_count}
+                icon={<CheckCircleOutlined />}
+                tone="warning"
+              />
             </Col>
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="我的课程" value={data.stats.course_count} prefix={<BookOutlined />} />
-              </Card>
+              <StatCard
+                label="我的课程"
+                value={data.stats.course_count}
+                icon={<BookOutlined />}
+              />
             </Col>
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="累计作答" value={data.stats.total_records} prefix={<HistoryOutlined />} />
-              </Card>
+              <StatCard
+                label="累计作答"
+                value={data.stats.total_records}
+                icon={<HistoryOutlined />}
+              />
             </Col>
           </Row>
 
@@ -311,7 +337,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildTeacherPendingOption(data)}
+                  option={buildTeacherPendingOption(data, chartTheme)}
                   ariaLabel="待批改题目数量图表"
                 />
               )}
@@ -323,7 +349,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildTeacherRecentExamOption(data)}
+                  option={buildTeacherRecentExamOption(data, chartTheme)}
                   ariaLabel="最近考试时间线图表"
                 />
               )}
@@ -381,24 +407,32 @@ const Dashboard = () => {
         <>
           <Row gutter={[16, 16]} className="dashboard-stats">
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="学生" value={data.stats.student_count} prefix={<UserOutlined />} />
-              </Card>
+              <StatCard
+                label="学生"
+                value={data.stats.student_count}
+                icon={<UserOutlined />}
+              />
             </Col>
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="教师" value={data.stats.teacher_count} prefix={<TeamOutlined />} />
-              </Card>
+              <StatCard
+                label="教师"
+                value={data.stats.teacher_count}
+                icon={<TeamOutlined />}
+              />
             </Col>
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="管理员" value={data.stats.admin_count} prefix={<AuditOutlined />} />
-              </Card>
+              <StatCard
+                label="管理员"
+                value={data.stats.admin_count}
+                icon={<AuditOutlined />}
+              />
             </Col>
             <Col xs={12} md={6}>
-              <Card className="stat-card">
-                <Statistic title="考试总数" value={data.stats.exam_count} prefix={<FileTextOutlined />} />
-              </Card>
+              <StatCard
+                label="考试总数"
+                value={data.stats.exam_count}
+                icon={<FileTextOutlined />}
+              />
             </Col>
           </Row>
 
@@ -410,7 +444,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminRoleOption(data)}
+                  option={buildAdminRoleOption(data, chartTheme)}
                   ariaLabel="用户角色分布图表"
                 />
               )}
@@ -422,7 +456,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminExamStatusOption(data)}
+                  option={buildAdminExamStatusOption(data, chartTheme)}
                   ariaLabel="考试状态分布图表"
                 />
               )}
@@ -434,7 +468,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminCourseExamOption(data)}
+                  option={buildAdminCourseExamOption(data, chartTheme)}
                   ariaLabel="各课程考试数量图表"
                 />
               )}
@@ -446,7 +480,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminExamAvgOption(data)}
+                  option={buildAdminExamAvgOption(data, chartTheme)}
                   ariaLabel="各考试平均分图表"
                 />
               )}
@@ -458,7 +492,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminExamPassRateOption(data)}
+                  option={buildAdminExamPassRateOption(data, chartTheme)}
                   ariaLabel="各考试及格率图表"
                 />
               )}
@@ -470,7 +504,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminScoreDistOption(data)}
+                  option={buildAdminScoreDistOption(data, chartTheme)}
                   ariaLabel="成绩分布图表"
                 />
               )}
@@ -482,7 +516,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminExamParticipationOption(data)}
+                  option={buildAdminExamParticipationOption(data, chartTheme)}
                   ariaLabel="各考试参与人数图表"
                 />
               )}
@@ -494,7 +528,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminPendingOption(data)}
+                  option={buildAdminPendingOption(data, chartTheme)}
                   ariaLabel="各考试待批改量图表"
                 />
               )}
@@ -506,7 +540,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminSwitchOption(data)}
+                  option={buildAdminSwitchOption(data, chartTheme)}
                   ariaLabel="各考试切屏次数图表"
                 />
               )}
@@ -518,7 +552,7 @@ const Dashboard = () => {
               ) : (
                 <EChart
                   className="dashboard-chart"
-                  option={buildAdminClassDistOption(data)}
+                  option={buildAdminClassDistOption(data, chartTheme)}
                   ariaLabel="班级学生分布图表"
                 />
               )}

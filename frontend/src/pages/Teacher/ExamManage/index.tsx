@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { App, Table, Button, Tag, Space, Popconfirm, Dropdown } from 'antd';
+import { App, Table, Button, Space, Popconfirm, Dropdown } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SendOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -9,13 +9,8 @@ import type { Exam, ExamStatus } from '../../../types/exam';
 import EmptyState from '../../../components/EmptyState';
 import PageHeader from '../../../components/PageHeader';
 import PageCard from '../../../components/PageCard';
-
-const statusMap: Record<ExamStatus, { color: string; text: string }> = {
-  draft: { color: 'default', text: '草稿' },
-  published: { color: 'success', text: '已发布' },
-  ongoing: { color: 'processing', text: '进行中' },
-  finished: { color: 'default', text: '已结束' },
-};
+import StatusTag from '../../../components/StatusTag';
+import './index.css';
 
 const ExamManage = () => {
   const { message } = App.useApp();
@@ -89,9 +84,7 @@ const ExamManage = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (status: ExamStatus) => (
-        <Tag color={statusMap[status]?.color}>{statusMap[status]?.text}</Tag>
-      ),
+      render: (status: ExamStatus) => <StatusTag status={status} />,
     },
     {
       title: '操作',
@@ -135,9 +128,9 @@ const ExamManage = () => {
           </Space>
         }
       />
-      <div style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 16 }}>
+      <p className="exam-manage-hint">
         模板说明：按模板填写题目后，可在考试编辑页『导入题目』中上传，支持 .xlsx / .docx 批量导入五种题型。
-      </div>
+      </p>
       <PageCard>
         <Table
           columns={columns}

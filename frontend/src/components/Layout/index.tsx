@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Dropdown, Avatar } from 'antd';
+import { Layout, Menu, Dropdown, Avatar, Tooltip, Button } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   UserOutlined,
@@ -16,10 +16,13 @@ import {
   DashboardOutlined,
   AppstoreOutlined,
   ReadOutlined,
+  SunOutlined,
+  MoonOutlined,
 } from '@ant-design/icons';
 import BrandLogo from '../BrandLogo';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import useAuthStore from '../../store/auth';
+import useThemeStore from '../../store/theme';
 import { logout as logoutApi } from '../../api/auth';
 import PageTransition from '../PageTransition';
 import './index.css';
@@ -30,6 +33,8 @@ const AppLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const user = useAuthStore((state) => state.user);
   const logoutStore = useAuthStore((state) => state.logout);
+  const mode = useThemeStore((state) => state.mode);
+  const toggleTheme = useThemeStore((state) => state.toggle);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -120,9 +125,22 @@ const AppLayout = () => {
             </span>
           </div>
           <div className="app-header-right">
+            <Tooltip title={mode === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}>
+              <Button
+                type="text"
+                className="app-theme-toggle"
+                aria-label={mode === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
+                icon={mode === 'dark' ? <SunOutlined /> : <MoonOutlined />}
+                onClick={toggleTheme}
+              />
+            </Tooltip>
             <Dropdown menu={userMenu} placement="bottomRight">
               <span className="app-user">
-                <Avatar size={32} style={{ background: '#3D5A80' }} icon={<UserOutlined />} />
+                <Avatar
+                  size={32}
+                  className="app-user-avatar"
+                  icon={<UserOutlined />}
+                />
                 <span className="app-user-name">{user?.name || user?.username}</span>
               </span>
             </Dropdown>

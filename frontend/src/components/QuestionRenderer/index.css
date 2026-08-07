@@ -1,5 +1,5 @@
 .question-card {
-  background: #fff;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 20px 24px;
@@ -29,7 +29,7 @@
   padding: 0 8px;
   border-radius: 7px;
   background: var(--color-primary-light);
-  color: var(--color-primary-active);
+  color: var(--color-primary);
   font-size: 13px;
   font-weight: 600;
 }
@@ -65,12 +65,12 @@
 
 .question-card-options .ant-radio-wrapper:hover,
 .question-card-options .ant-checkbox-wrapper:hover {
-  background: #f5f8fc;
+  background: var(--color-row-hover);
   border-color: var(--color-border);
 }
 
 .question-card-options .ant-radio-wrapper-checked,
 .question-card-options .ant-checkbox-wrapper-checked {
   background: var(--color-primary-light);
-  border-color: rgba(61, 90, 128, 0.35);
+  border-color: var(--color-primary);
 }

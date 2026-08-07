@@ -14,6 +14,7 @@ import { getCourses } from '../../../api/courses';
 import { getClasses } from '../../../api/classes';
 import PageHeader from '../../../components/PageHeader';
 import ImportModal from '../../../components/ImportModal';
+import { QUESTION_TYPE_META, QUESTION_TYPES, getQuestionTypeMeta } from '../../../constants/questionTypes';
 import type { ExamFormValues } from '../../../types/exam';
 import type { ExamInput } from '../../../types/exam';
 import type { Course } from '../../../types/course';
@@ -21,14 +22,6 @@ import type { Class } from '../../../types/class';
 import type { Question, QuestionType, QuestionFormValues, QuestionInput } from '../../../types/question';
 
 const { TextArea } = Input;
-
-const typeMap: Record<QuestionType, { color: string; text: string }> = {
-  single: { color: 'blue', text: '单选题' },
-  multiple: { color: 'geekblue', text: '多选题' },
-  judge: { color: 'orange', text: '判断题' },
-  blank: { color: 'purple', text: '填空题' },
-  essay: { color: 'green', text: '简答题' },
-};
 
 const optionLetters = (index: number) => String.fromCharCode(65 + index);
 
@@ -196,7 +189,10 @@ const ExamEdit = () => {
       dataIndex: 'type',
       key: 'type',
       width: 90,
-      render: (type: QuestionType) => <Tag color={typeMap[type]?.color}>{typeMap[type]?.text}</Tag>,
+      render: (type: QuestionType) => {
+        const meta = getQuestionTypeMeta(type);
+        return <Tag color={meta.color}>{meta.text}</Tag>;
+      },
     },
     { title: '题目内容', dataIndex: 'content', key: 'content', ellipsis: true },
     {
@@ -223,18 +219,19 @@ const ExamEdit = () => {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/exams')}>
-          返回列表
-        </Button>
-        <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSaveExam}>
-          {isNew ? '创建考试' : '保存考试信息'}
-        </Button>
-      </Space>
-
       <PageHeader
         title={isNew ? '新建考试' : '编辑考试'}
         subtitle={isNew ? '填写考试基本信息' : '配置考试信息并管理题目'}
+        extra={
+          <Space>
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/exams')}>
+              返回列表
+            </Button>
+            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSaveExam}>
+              {isNew ? '创建考试' : '保存考试信息'}
+            </Button>
+          </Space>
+        }
       />
 
       <Card loading={loading} title="考试基本信息" style={{ marginBottom: 16 }}>
@@ -367,9 +364,9 @@ const ExamEdit = () => {
             <Col span={12}>
               <Form.Item name="type" label="题型" rules={[{ required: true }]}>
                 <Select>
-                  {(Object.keys(typeMap) as QuestionType[]).map((value) => (
+                  {QUESTION_TYPES.map((value) => (
                     <Select.Option key={value} value={value}>
-                      {typeMap[value].text}
+                      {QUESTION_TYPE_META[value].text}
                     </Select.Option>
                   ))}
                 </Select>

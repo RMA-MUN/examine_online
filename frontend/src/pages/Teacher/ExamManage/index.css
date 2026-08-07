@@ -1,0 +1,7 @@
+/* 模板说明：紧跟页头的辅助文案，比正文低一级 */
+.exam-manage-hint {
+  margin: -8px 0 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}

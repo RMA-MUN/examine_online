@@ -2,17 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { App, Drawer, Descriptions, Tag, Spin, Collapse } from 'antd';
 import { getMyRecordAnswers } from '../../../api/grading';
 import { shouldShowAiGrading } from '../../../utils/aiGrading';
+import { getQuestionTypeMeta } from '../../../constants/questionTypes';
+import PageCard from '../../../components/PageCard';
+import StatusTag from '../../../components/StatusTag';
 import type { ExamRecord } from '../../../types/record';
 import type { Answer } from '../../../types/answer';
-import type { QuestionType } from '../../../types/question';
-
-const typeMap: Record<QuestionType, { text: string; color: string }> = {
-  single: { text: '单选题', color: 'blue' },
-  multiple: { text: '多选题', color: 'geekblue' },
-  judge: { text: '判断题', color: 'orange' },
-  blank: { text: '填空题', color: 'purple' },
-  essay: { text: '简答题', color: 'green' },
-};
 
 interface ResultDrawerProps {
   record: ExamRecord | null;
@@ -57,9 +51,7 @@ const ResultDrawer = ({ record, open, onClose }: ResultDrawerProps) => {
           <>
             <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
               <Descriptions.Item label="状态">
-                <Tag color={record.status === 'graded' ? 'success' : 'warning'}>
-                  {record.status === 'graded' ? '已阅卷' : '待阅卷'}
-                </Tag>
+                <StatusTag status={record.status} />
               </Descriptions.Item>
               <Descriptions.Item label="得分">{totalEarned} / {totalFull}</Descriptions.Item>
               <Descriptions.Item label="提交时间" span={2}>
@@ -68,9 +60,9 @@ const ResultDrawer = ({ record, open, onClose }: ResultDrawerProps) => {
             </Descriptions>
 
             {answers.map((a, index) => (
-              <div key={a.id} style={{ border: '1px solid var(--color-border)', borderRadius: 12, padding: 16, marginBottom: 16, background: '#fff', boxShadow: 'var(--shadow-card)' }}>
-                <Tag color={typeMap[a.question?.type ?? 'blank']?.color}>
-                  {typeMap[a.question?.type ?? 'blank']?.text}
+              <PageCard key={a.id} className="answer-card">
+                <Tag color={getQuestionTypeMeta(a.question?.type).color}>
+                  {getQuestionTypeMeta(a.question?.type).text}
                 </Tag>
                 <strong>第 {index + 1} 题</strong>
                 <span>（{a.question?.score}分）</span>
@@ -113,7 +105,7 @@ const ResultDrawer = ({ record, open, onClose }: ResultDrawerProps) => {
                     }]}
                   />
                 )}
-              </div>
+              </PageCard>
             ))}
             {answers.length === 0 && <div>该记录暂无答案</div>}
           </>

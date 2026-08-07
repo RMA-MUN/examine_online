@@ -15,6 +15,7 @@ import {
   buildTeacherPendingOption,
   buildTeacherRecentExamOption,
 } from './chartOptions';
+import { getChartTheme } from '../../theme/chartTheme';
 
 const student: StudentDashboardData = {
   role: 'student',
@@ -117,20 +118,67 @@ const admin: AdminDashboardData = {
 
 test('admin role option keeps labels and colors tied to roles', () => {
   const option = buildAdminRoleOption(admin) as any;
+  const light = getChartTheme('light');
+  // 身份色绑定角色本身，与它在数据里的顺序无关
   expect(
     option.series[0].data.map((item: any) => [item.name, item.itemStyle.color])
   ).toEqual([
-    ['教师', '#EB6834'],
-    ['管理员', '#1BAF7A'],
-    ['学生', '#2A78D6'],
+    ['教师', light.categorical[1]],
+    ['管理员', light.categorical[2]],
+    ['学生', light.categorical[0]],
   ]);
+});
+
+test('admin role colors follow the role, not the row order', () => {
+  const reordered = buildAdminRoleOption({
+    ...admin,
+    role_distribution: [
+      { role: 'student', count: 4 },
+      { role: 'teacher', count: 2 },
+      { role: 'admin', count: 1 },
+    ],
+  }) as any;
+  const byName = Object.fromEntries(
+    reordered.series[0].data.map((item: any) => [item.name, item.itemStyle.color])
+  );
+  const light = getChartTheme('light');
+  expect(byName['学生']).toBe(light.categorical[0]);
+  expect(byName['教师']).toBe(light.categorical[1]);
+  expect(byName['管理员']).toBe(light.categorical[2]);
+});
+
+test('exam status slices use the ordinal ramp in lifecycle order', () => {
+  const option = buildAdminExamStatusOption({
+    ...admin,
+    exam_status_distribution: [
+      { status: 'draft', count: 1 },
+      { status: 'published', count: 2 },
+      { status: 'ongoing', count: 3 },
+      { status: 'finished', count: 4 },
+    ],
+  }) as any;
+  const { ordinal4 } = getChartTheme('light');
+  expect(option.series[0].data.map((item: any) => item.itemStyle.color)).toEqual(ordinal4);
+});
+
+test('score distribution buckets deepen with the score range', () => {
+  const option = buildAdminScoreDistOption(admin) as any;
+  const { ordinal5 } = getChartTheme('light');
+  expect(option.series[0].data.map((item: any) => item.itemStyle.color)).toEqual(ordinal5);
+});
+
+test('dark theme swaps every chart color to the dark palette', () => {
+  const dark = getChartTheme('dark');
+  const option = buildAdminCourseExamOption(admin, dark) as any;
+  expect(option.series[0].itemStyle.color).toBe(dark.categorical[0]);
+  expect(option.xAxis.axisLabel.color).toBe(dark.axisLabel);
 });
 
 test('admin exam status option maps status codes to Chinese labels', () => {
   const option = buildAdminExamStatusOption(admin) as any;
-  expect(option.series[0].data).toEqual([
-    { name: '已发布', value: 2 },
-    { name: '已结束', value: 1 },
+  expect(option.series[0].data.map((item: any) => [item.name, item.value])).toEqual([
+    ['已发布', 2],
+    ['已结束', 1],
   ]);
 });
 
@@ -156,7 +204,7 @@ test('admin exam pass rate option caps y axis at 100', () => {
 test('admin score distribution option keeps all five buckets', () => {
   const option = buildAdminScoreDistOption(admin) as any;
   expect(option.xAxis.data).toEqual(['0-59', '60-69', '70-79', '80-89', '90-100']);
-  expect(option.series[0].data).toEqual([1, 0, 0, 1, 0]);
+  expect(option.series[0].data.map((item: any) => item.value)).toEqual([1, 0, 0, 1, 0]);
 });
 
 test('admin exam participation option maps titles to counts', () => {

@@ -5,6 +5,7 @@ import type { UploadProps } from 'antd';
 import { importQuestionsFile } from '../../api/exams';
 import { downloadTemplateFile } from '../../utils/templateDownload';
 import type { ImportError } from '../../types/question';
+import './index.css';
 
 const { Dragger } = Upload;
 
@@ -174,8 +175,8 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, examId, onClose, onSucc
       )}
 
       {importResult && (
-        <div style={{ marginBottom: 16, padding: 16, background: '#f6ffed', borderRadius: 8 }}>
-          <div style={{ fontWeight: 'bold', marginBottom: 8 }}>导入成功</div>
+        <div className="import-result">
+          <div className="import-result-title">导入成功</div>
           <div>共导入 {importResult.total} 道题目</div>
           {Object.entries(importResult.typeCounts).length > 0 && (
             <div style={{ marginTop: 8 }}>
@@ -190,7 +191,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, examId, onClose, onSucc
 
       {errors.length > 0 && (
         <div>
-          <div style={{ marginBottom: 8, color: '#ff4d4f', fontWeight: 'bold' }}>
+          <div className="import-error-title">
             发现 {errors.length} 处错误，请修改后重新上传
           </div>
           <Table

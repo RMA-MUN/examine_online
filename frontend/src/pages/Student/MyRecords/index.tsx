@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { App, Table, Tag, Button } from 'antd';
+import { App, Table, Button } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { getMyRecords } from '../../../api/exams';
 import type { ExamRecord, RecordStatus } from '../../../types/record';
 import EmptyState from '../../../components/EmptyState';
 import PageHeader from '../../../components/PageHeader';
 import PageCard from '../../../components/PageCard';
+import StatusTag from '../../../components/StatusTag';
 import ResultDrawer from './ResultDrawer';
-
-const statusMap: Record<RecordStatus, { color: string; text: string }> = {
-  ongoing: { color: 'processing', text: '进行中' },
-  submitted: { color: 'warning', text: '待阅卷' },
-  graded: { color: 'success', text: '已阅卷' },
-};
 
 const MyRecords = () => {
   const { message } = App.useApp();
@@ -49,9 +44,7 @@ const MyRecords = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (status: RecordStatus) => (
-        <Tag color={statusMap[status]?.color}>{statusMap[status]?.text || status}</Tag>
-      ),
+      render: (status: RecordStatus) => <StatusTag status={status} />,
     },
     {
       title: '开始时间',

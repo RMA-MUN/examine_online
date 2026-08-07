@@ -1,0 +1,15 @@
+/* 三个区块平铺，不再用 Card type="inner" 套在 PageCard 里（双层描边显得沉重） */
+.profile-section {
+  margin-bottom: 16px;
+}
+
+.profile-section:last-child {
+  margin-bottom: 0;
+}
+
+.profile-section-title {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+}

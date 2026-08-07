@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { App, Table, Button, Select, Tag, Space } from 'antd';
+import { App, Table, Button, Select, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useSearchParams } from 'react-router-dom';
 import { getExams } from '../../../api/exams';
@@ -8,13 +8,8 @@ import type { Exam } from '../../../types/exam';
 import type { ExamRecord, RecordStatus } from '../../../types/record';
 import PageHeader from '../../../components/PageHeader';
 import PageCard from '../../../components/PageCard';
+import StatusTag from '../../../components/StatusTag';
 import GradingDrawer from './GradingDrawer';
-
-const statusMap: Record<RecordStatus, { color: string; text: string }> = {
-  ongoing: { color: 'processing', text: '进行中' },
-  submitted: { color: 'warning', text: '待阅卷' },
-  graded: { color: 'success', text: '已阅卷' },
-};
 
 const Grading = () => {
   const { message } = App.useApp();
@@ -78,7 +73,7 @@ const Grading = () => {
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (s: RecordStatus) => <Tag color={statusMap[s]?.color}>{statusMap[s]?.text || s}</Tag>,
+      render: (s: RecordStatus) => <StatusTag status={s} />,
     },
     { title: '切屏次数', dataIndex: 'switch_count', key: 'switch_count', width: 100 },
     {
