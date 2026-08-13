@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { App, Row, Col, Button, Modal, Select, Space } from 'antd';
 import {
   FileTextOutlined,
@@ -43,6 +43,29 @@ import {
   buildAdminClassDistOption,
 } from './chartOptions';
 import './index.css';
+
+/**
+ * 测量图表卡片实际宽度，让柱状图 x 轴标签按容器宽度自适应换行。
+ * 首帧 width=0 时照常渲染，构建器回退默认行宽，避免闪烁。
+ */
+const ChartBox = ({ children }: { children: (width: number) => React.ReactNode }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} style={{ width: '100%' }}>
+      {children(width)}
+    </div>
+  );
+};
 
 const Dashboard = () => {
   const { message } = App.useApp();
@@ -228,11 +251,15 @@ const Dashboard = () => {
               {data.recent_records.length === 0 ? (
                 <EmptyState title="还没有考试记录" description="参加考试后成绩会显示在这里" />
               ) : (
-                <EChart
-                  className="dashboard-chart"
-                  option={buildStudentScoreOption(data, chartTheme)}
-                  ariaLabel="最近成绩与及格线图表"
-                />
+                <ChartBox>
+                  {(width) => (
+                    <EChart
+                      className="dashboard-chart"
+                      option={buildStudentScoreOption(data, chartTheme, width)}
+                      ariaLabel="最近成绩与及格线图表"
+                    />
+                  )}
+                </ChartBox>
               )}
             </PageCard>
             <PageCard className="dashboard-section dashboard-chart-card">
@@ -466,11 +493,15 @@ const Dashboard = () => {
               {data.exams_per_course.length === 0 ? (
                 <EmptyState title="暂无课程数据" />
               ) : (
-                <EChart
-                  className="dashboard-chart"
-                  option={buildAdminCourseExamOption(data, chartTheme)}
-                  ariaLabel="各课程考试数量图表"
-                />
+                <ChartBox>
+                  {(width) => (
+                    <EChart
+                      className="dashboard-chart"
+                      option={buildAdminCourseExamOption(data, chartTheme, width)}
+                      ariaLabel="各课程考试数量图表"
+                    />
+                  )}
+                </ChartBox>
               )}
             </PageCard>
             <PageCard className="dashboard-section dashboard-chart-card">
@@ -478,11 +509,15 @@ const Dashboard = () => {
               {data.exam_avg_scores.length === 0 ? (
                 <EmptyState title="暂无成绩数据" />
               ) : (
-                <EChart
-                  className="dashboard-chart"
-                  option={buildAdminExamAvgOption(data, chartTheme)}
-                  ariaLabel="各考试平均分图表"
-                />
+                <ChartBox>
+                  {(width) => (
+                    <EChart
+                      className="dashboard-chart"
+                      option={buildAdminExamAvgOption(data, chartTheme, width)}
+                      ariaLabel="各考试平均分图表"
+                    />
+                  )}
+                </ChartBox>
               )}
             </PageCard>
             <PageCard className="dashboard-section dashboard-chart-card">
@@ -490,11 +525,15 @@ const Dashboard = () => {
               {data.exam_pass_rates.length === 0 ? (
                 <EmptyState title="暂无成绩数据" />
               ) : (
-                <EChart
-                  className="dashboard-chart"
-                  option={buildAdminExamPassRateOption(data, chartTheme)}
-                  ariaLabel="各考试及格率图表"
-                />
+                <ChartBox>
+                  {(width) => (
+                    <EChart
+                      className="dashboard-chart"
+                      option={buildAdminExamPassRateOption(data, chartTheme, width)}
+                      ariaLabel="各考试及格率图表"
+                    />
+                  )}
+                </ChartBox>
               )}
             </PageCard>
             <PageCard className="dashboard-section dashboard-chart-card">
@@ -502,11 +541,15 @@ const Dashboard = () => {
               {data.score_distribution.every((item) => item.count === 0) ? (
                 <EmptyState title="暂无成绩数据" />
               ) : (
-                <EChart
-                  className="dashboard-chart"
-                  option={buildAdminScoreDistOption(data, chartTheme)}
-                  ariaLabel="成绩分布图表"
-                />
+                <ChartBox>
+                  {(width) => (
+                    <EChart
+                      className="dashboard-chart"
+                      option={buildAdminScoreDistOption(data, chartTheme, width)}
+                      ariaLabel="成绩分布图表"
+                    />
+                  )}
+                </ChartBox>
               )}
             </PageCard>
             <PageCard className="dashboard-section dashboard-chart-card">
@@ -514,11 +557,15 @@ const Dashboard = () => {
               {data.exam_participation.length === 0 ? (
                 <EmptyState title="暂无参与数据" />
               ) : (
-                <EChart
-                  className="dashboard-chart"
-                  option={buildAdminExamParticipationOption(data, chartTheme)}
-                  ariaLabel="各考试参与人数图表"
-                />
+                <ChartBox>
+                  {(width) => (
+                    <EChart
+                      className="dashboard-chart"
+                      option={buildAdminExamParticipationOption(data, chartTheme, width)}
+                      ariaLabel="各考试参与人数图表"
+                    />
+                  )}
+                </ChartBox>
               )}
             </PageCard>
             <PageCard className="dashboard-section dashboard-chart-card">
@@ -526,11 +573,15 @@ const Dashboard = () => {
               {data.pending_grading_by_exam.length === 0 ? (
                 <EmptyState title="暂无待批改数据" />
               ) : (
-                <EChart
-                  className="dashboard-chart"
-                  option={buildAdminPendingOption(data, chartTheme)}
-                  ariaLabel="各考试待批改量图表"
-                />
+                <ChartBox>
+                  {(width) => (
+                    <EChart
+                      className="dashboard-chart"
+                      option={buildAdminPendingOption(data, chartTheme, width)}
+                      ariaLabel="各考试待批改量图表"
+                    />
+                  )}
+                </ChartBox>
               )}
             </PageCard>
             <PageCard className="dashboard-section dashboard-chart-card">
@@ -538,11 +589,15 @@ const Dashboard = () => {
               {data.switch_counts_by_exam.length === 0 ? (
                 <EmptyState title="暂无切屏数据" />
               ) : (
-                <EChart
-                  className="dashboard-chart"
-                  option={buildAdminSwitchOption(data, chartTheme)}
-                  ariaLabel="各考试切屏次数图表"
-                />
+                <ChartBox>
+                  {(width) => (
+                    <EChart
+                      className="dashboard-chart"
+                      option={buildAdminSwitchOption(data, chartTheme, width)}
+                      ariaLabel="各考试切屏次数图表"
+                    />
+                  )}
+                </ChartBox>
               )}
             </PageCard>
             <PageCard className="dashboard-section dashboard-chart-card">
@@ -550,11 +605,15 @@ const Dashboard = () => {
               {data.class_student_distribution.length === 0 ? (
                 <EmptyState title="暂无班级数据" />
               ) : (
-                <EChart
-                  className="dashboard-chart"
-                  option={buildAdminClassDistOption(data, chartTheme)}
-                  ariaLabel="班级学生分布图表"
-                />
+                <ChartBox>
+                  {(width) => (
+                    <EChart
+                      className="dashboard-chart"
+                      option={buildAdminClassDistOption(data, chartTheme, width)}
+                      ariaLabel="班级学生分布图表"
+                    />
+                  )}
+                </ChartBox>
               )}
             </PageCard>
           </div>

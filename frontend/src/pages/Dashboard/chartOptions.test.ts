@@ -14,6 +14,7 @@ import {
   buildStudentScoreOption,
   buildTeacherPendingOption,
   buildTeacherRecentExamOption,
+  wrapLabel,
 } from './chartOptions';
 import { getChartTheme } from '../../theme/chartTheme';
 
@@ -223,6 +224,38 @@ test('admin switch count option maps exams to switch totals', () => {
   const option = buildAdminSwitchOption(admin) as any;
   expect(option.xAxis.data).toEqual(['期中考试']);
   expect(option.series[0].data).toEqual([3]);
+});
+
+test('wrapLabel keeps short names on one line', () => {
+  expect(wrapLabel('期中考试')).toBe('期中考试');
+});
+
+test('wrapLabel splits long names onto two lines', () => {
+  expect(wrapLabel('程序设计期中考试2026')).toBe('程序设计期中\n考试2026');
+});
+
+test('wrapLabel truncates very long names with ellipsis', () => {
+  expect(wrapLabel('2026年春季学期期末考试')).toBe('2026年春\n季学期期末考…');
+});
+
+test('category axis label formatter wraps tighter in a narrow container', () => {
+  const names = Array.from({ length: 8 }, (_, i) => `考试${i + 1}号`);
+  const option = buildAdminCourseExamOption(
+    { ...admin, exams_per_course: names.map((course_name) => ({ course_name, count: 1 })) },
+    undefined,
+    320
+  ) as any;
+  expect(option.xAxis.axisLabel.formatter('八个字的考试名称')).toBe('八个\n字的…');
+});
+
+test('category axis label formatter stays on one line in a wide container', () => {
+  const names = Array.from({ length: 8 }, (_, i) => `考试${i + 1}号`);
+  const option = buildAdminCourseExamOption(
+    { ...admin, exams_per_course: names.map((course_name) => ({ course_name, count: 1 })) },
+    undefined,
+    1200
+  ) as any;
+  expect(option.xAxis.axisLabel.formatter('八个字的考试名称')).toBe('八个字的考试名称');
 });
 
 test('admin class distribution option maps classes to student counts', () => {

@@ -53,19 +53,39 @@ const tooltipStyle = (theme: ChartTheme) => ({
   extraCssText: 'box-shadow: 0 6px 16px rgba(0,0,0,0.08); border-radius: 8px;',
 });
 
-/** 类目轴标签：条目多时旋转，网格留白同步加大，避免标签被裁切 */
-const rotateLabel = (count: number) => ({ interval: 0, rotate: count > 6 ? 30 : 0 });
+/**
+ * 类目轴标签：按容器宽度估算每行可容纳的字数，
+ * 窗口窄时自动缩短行宽，避免相邻标签重叠；未知宽度时回退默认 6 字。
+ */
+const charsPerLineFor = (containerWidth: number | undefined, count: number): number => {
+  if (!containerWidth || count <= 0) return 6;
+  const slotWidth = (containerWidth - 48) / count;
+  return Math.max(2, Math.floor(slotWidth / 13));
+};
 
-const categoryAxis = (theme: ChartTheme, data: string[], rotate = true) => ({
-  type: 'category' as const,
-  data,
-  axisLabel: {
-    ...axisLabelStyle(theme),
-    ...(rotate ? rotateLabel(data.length) : { interval: 0 }),
-  },
-  axisLine: { lineStyle: { color: theme.axisLine } },
-  axisTick: { show: false },
-});
+/** 类目轴标签：长名称按每行字数换行，最多两行，超长截断（完整名称在 tooltip 中） */
+export const wrapLabel = (text: string, maxCharsPerLine = 6): string => {
+  if (text.length <= maxCharsPerLine) return text;
+  const first = text.slice(0, maxCharsPerLine);
+  const rest = text.slice(maxCharsPerLine);
+  if (rest.length <= maxCharsPerLine) return `${first}\n${rest}`;
+  return `${first}\n${rest.slice(0, maxCharsPerLine)}…`;
+};
+
+const categoryAxis = (theme: ChartTheme, data: string[], containerWidth?: number) => {
+  const charsPerLine = charsPerLineFor(containerWidth, data.length);
+  return {
+    type: 'category' as const,
+    data,
+    axisLabel: {
+      ...axisLabelStyle(theme),
+      interval: 0,
+      formatter: (value: string) => wrapLabel(value, charsPerLine),
+    },
+    axisLine: { lineStyle: { color: theme.axisLine } },
+    axisTick: { show: false },
+  };
+};
 
 const valueAxis = (theme: ChartTheme, extra: Record<string, unknown> = {}) => ({
   type: 'value' as const,
@@ -78,7 +98,7 @@ const valueAxis = (theme: ChartTheme, extra: Record<string, unknown> = {}) => ({
 
 /**
  * containLabel 让 ECharts 按实际标签尺寸预留空间，
- * 中文长标题旋转后也不会顶到容器外（固定 bottom 会裁掉 x 轴）。
+ * 中文长标题换行成两行后也不会顶到容器外（固定 bottom 会裁掉 x 轴）。
  */
 const cartesianBase = (theme: ChartTheme): EChartsOption => ({
   animationDuration: 450,
@@ -110,7 +130,8 @@ const rampColor = (ramp: string[], index: number) => ramp[Math.min(index, ramp.l
 
 export const buildStudentScoreOption = (
   data: StudentDashboardData,
-  theme: ChartTheme = getChartTheme()
+  theme: ChartTheme = getChartTheme(),
+  containerWidth?: number
 ): EChartsOption => ({
   ...cartesianBase(theme),
   tooltip: {
@@ -137,11 +158,7 @@ export const buildStudentScoreOption = (
     itemGap: 16,
     textStyle: axisLabelStyle(theme),
   },
-  xAxis: categoryAxis(
-    theme,
-    data.recent_records.map((record) => record.exam_title),
-    false
-  ),
+  xAxis: categoryAxis(theme, data.recent_records.map((record) => record.exam_title), containerWidth),
   yAxis: valueAxis(theme, { min: 0 }),
   series: [
     columnSeries('得分', data.recent_records.map((r) => r.score), theme.categorical[0]),
@@ -332,10 +349,11 @@ export const buildAdminExamStatusOption = (
 
 export const buildAdminCourseExamOption = (
   data: AdminDashboardData,
-  theme: ChartTheme = getChartTheme()
+  theme: ChartTheme = getChartTheme(),
+  containerWidth?: number
 ): EChartsOption => ({
   ...cartesianBase(theme),
-  xAxis: categoryAxis(theme, data.exams_per_course.map((item) => item.course_name)),
+  xAxis: categoryAxis(theme, data.exams_per_course.map((item) => item.course_name), containerWidth),
   yAxis: valueAxis(theme, { minInterval: 1 }),
   series: [
     columnSeries(
@@ -348,10 +366,11 @@ export const buildAdminCourseExamOption = (
 
 export const buildAdminExamAvgOption = (
   data: AdminDashboardData,
-  theme: ChartTheme = getChartTheme()
+  theme: ChartTheme = getChartTheme(),
+  containerWidth?: number
 ): EChartsOption => ({
   ...cartesianBase(theme),
-  xAxis: categoryAxis(theme, data.exam_avg_scores.map((item) => item.exam_title)),
+  xAxis: categoryAxis(theme, data.exam_avg_scores.map((item) => item.exam_title), containerWidth),
   yAxis: valueAxis(theme, { min: 0 }),
   series: [
     columnSeries(
@@ -365,10 +384,11 @@ export const buildAdminExamAvgOption = (
 /** 及格率语义上有好坏之分，用状态色而非身份色 */
 export const buildAdminExamPassRateOption = (
   data: AdminDashboardData,
-  theme: ChartTheme = getChartTheme()
+  theme: ChartTheme = getChartTheme(),
+  containerWidth?: number
 ): EChartsOption => ({
   ...cartesianBase(theme),
-  xAxis: categoryAxis(theme, data.exam_pass_rates.map((item) => item.exam_title)),
+  xAxis: categoryAxis(theme, data.exam_pass_rates.map((item) => item.exam_title), containerWidth),
   yAxis: valueAxis(theme, { min: 0, max: 100, axisLabel: { ...axisLabelStyle(theme), formatter: '{value}%' } }),
   series: [
     columnSeries(
@@ -382,10 +402,11 @@ export const buildAdminExamPassRateOption = (
 /** 成绩区间是有序桶，色阶随分数升高加深 */
 export const buildAdminScoreDistOption = (
   data: AdminDashboardData,
-  theme: ChartTheme = getChartTheme()
+  theme: ChartTheme = getChartTheme(),
+  containerWidth?: number
 ): EChartsOption => ({
   ...cartesianBase(theme),
-  xAxis: categoryAxis(theme, data.score_distribution.map((item) => item.label), false),
+  xAxis: categoryAxis(theme, data.score_distribution.map((item) => item.label), containerWidth),
   yAxis: valueAxis(theme, { minInterval: 1 }),
   series: [
     {
@@ -405,10 +426,11 @@ export const buildAdminScoreDistOption = (
 
 export const buildAdminExamParticipationOption = (
   data: AdminDashboardData,
-  theme: ChartTheme = getChartTheme()
+  theme: ChartTheme = getChartTheme(),
+  containerWidth?: number
 ): EChartsOption => ({
   ...cartesianBase(theme),
-  xAxis: categoryAxis(theme, data.exam_participation.map((item) => item.exam_title)),
+  xAxis: categoryAxis(theme, data.exam_participation.map((item) => item.exam_title), containerWidth),
   yAxis: valueAxis(theme, { minInterval: 1 }),
   series: [
     columnSeries(
@@ -421,10 +443,11 @@ export const buildAdminExamParticipationOption = (
 
 export const buildAdminPendingOption = (
   data: AdminDashboardData,
-  theme: ChartTheme = getChartTheme()
+  theme: ChartTheme = getChartTheme(),
+  containerWidth?: number
 ): EChartsOption => ({
   ...cartesianBase(theme),
-  xAxis: categoryAxis(theme, data.pending_grading_by_exam.map((item) => item.exam_title)),
+  xAxis: categoryAxis(theme, data.pending_grading_by_exam.map((item) => item.exam_title), containerWidth),
   yAxis: valueAxis(theme, { minInterval: 1 }),
   series: [
     columnSeries(
@@ -438,10 +461,11 @@ export const buildAdminPendingOption = (
 /** 切屏次数是作弊风险信号，用告警色表达其含义 */
 export const buildAdminSwitchOption = (
   data: AdminDashboardData,
-  theme: ChartTheme = getChartTheme()
+  theme: ChartTheme = getChartTheme(),
+  containerWidth?: number
 ): EChartsOption => ({
   ...cartesianBase(theme),
-  xAxis: categoryAxis(theme, data.switch_counts_by_exam.map((item) => item.exam_title)),
+  xAxis: categoryAxis(theme, data.switch_counts_by_exam.map((item) => item.exam_title), containerWidth),
   yAxis: valueAxis(theme, { minInterval: 1 }),
   series: [
     columnSeries(
@@ -454,10 +478,11 @@ export const buildAdminSwitchOption = (
 
 export const buildAdminClassDistOption = (
   data: AdminDashboardData,
-  theme: ChartTheme = getChartTheme()
+  theme: ChartTheme = getChartTheme(),
+  containerWidth?: number
 ): EChartsOption => ({
   ...cartesianBase(theme),
-  xAxis: categoryAxis(theme, data.class_student_distribution.map((item) => item.class_name)),
+  xAxis: categoryAxis(theme, data.class_student_distribution.map((item) => item.class_name), containerWidth),
   yAxis: valueAxis(theme, { minInterval: 1 }),
   series: [
     columnSeries(
