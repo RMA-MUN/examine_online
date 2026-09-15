@@ -124,3 +124,37 @@ async def test_student_cannot_access_bank(client, db: AsyncSession):
     _, student, _, _ = await _make_setup(db)
     resp = await client.get("/api/bank/questions", headers=_auth_header(student))
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_from_bank_rejects_other_subject_item(client, db: AsyncSession):
+    teacher, _, _, exam = await _make_setup(db)
+    other = User(username="bank_t2", password_hash="x", role="teacher", name="T2")
+    db.add(other)
+    await db.flush()
+    other_course = Course(name="大学英语", teacher_id=other.id)
+    db.add(other_course)
+    await db.flush()
+    await assign_subject_to_teacher(db, other.id, other_course.id)
+
+    resp = await client.post(
+        "/api/bank/questions",
+        json={
+            "type": "single",
+            "content": "下列选项中发音不同的是？",
+            "options": ["A", "B", "C", "D"],
+            "answer": "A",
+            "score": 5,
+            "course_id": other_course.id,
+        },
+        headers=_auth_header(other),
+    )
+    assert resp.status_code in (200, 201)
+    other_bank_id = resp.json()["data"]["id"]
+
+    resp = await client.post(
+        f"/api/exams/{exam.id}/questions/from-bank",
+        json={"bank_ids": [other_bank_id]},
+        headers=_auth_header(teacher),
+    )
+    assert resp.status_code == 403

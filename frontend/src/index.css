@@ -11,9 +11,9 @@ body,
 
 :root {
   --color-primary: #2E7D4F;
-  --color-primary-hover: #4A6B94;
-  --color-primary-active: #2C4460;
-  --color-primary-light: #E8EDF3;
+  --color-primary-hover: #245F3D;
+  --color-primary-active: #1B4A2F;
+  --color-primary-light: #E7F2EB;
   --color-bg: #F0F2F5;
   --color-surface: #FFFFFF;
   --color-surface-sunken: #F7F9FB;
@@ -47,10 +47,8 @@ body,
   --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC',
     'Microsoft YaHei', 'Helvetica Neue', sans-serif;
   --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
-}
 
-/* ---------- 明鉴（Mingjian）主题令牌：后继任务经 ConfigProvider/图表消费 ---------- */
-:root {
+  /* ---------- 明鉴（Mingjian）主题令牌：后继任务经 ConfigProvider/图表消费 ---------- */
   --mj-primary: #2E7D4F;
   --mj-sider-bg: #FFFFFF;
   --mj-content-bg: #F4F6F4;
@@ -65,9 +63,9 @@ body,
  */
 :root[data-theme='dark'] {
   --color-primary: #5FB87E;
-  --color-primary-hover: #82B0DC;
-  --color-primary-active: #4A83BE;
-  --color-primary-light: #24344A;
+  --color-primary-hover: #4C9A67;
+  --color-primary-active: #35744C;
+  --color-primary-light: #223A2D;
   --color-bg: #16202C;
   --color-surface: #1E2A3A;
   --color-surface-sunken: #24313F;
@@ -92,9 +90,7 @@ body,
   --shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-pop: 0 6px 18px rgba(0, 0, 0, 0.4);
   --shadow-modal: 0 14px 44px rgba(0, 0, 0, 0.52);
-}
 
-:root[data-theme='dark'] {
   --mj-primary: #5FB87E;
   --mj-sider-bg: #141F19;
   --mj-content-bg: #101915;

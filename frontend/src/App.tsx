@@ -56,10 +56,10 @@ const ExamsPage = () => {
   return user?.role === 'student' ? <ExamList /> : <ExamManage />;
 };
 
-const Placeholder = () => <div style={{ padding: 24 }}>即将上线</div>;
-
 const RequireRole = ({ roles, children }: { roles: Role[]; children: ReactNode }) => {
   const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
+  if (token && !user) return null;
   if (!user) return <>{children}</>;
   return roles.includes(user.role) ? <>{children}</> : <Navigate to="/dashboard" replace />;
 };

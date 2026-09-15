@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { App, Button, Modal } from 'antd';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { getExam, getPaper, saveAnswers, submitExam, recordSwitch } from '../../../api/exams';
+import { getExam, getPaper, saveAnswers, submitExam, recordSwitch, getSwitchStatus } from '../../../api/exams';
 import QuestionRenderer from '../../../components/QuestionRenderer';
 import EmptyState from '../../../components/EmptyState';
 import useAuthStore from '../../../store/auth';
@@ -57,6 +57,22 @@ const ExamTaking = () => {
     const duration = (location.state as { duration?: number } | null)?.duration;
     return duration ? duration * 60 : 0;
   });
+
+  // 切屏计数 hydration：挂载时以后端 switch-status 为准，失败回退 0；上报路径不变
+  useEffect(() => {
+    let cancelled = false;
+    getSwitchStatus(Number(examId))
+      .then((res) => {
+        const count = (res.data as { switch_count?: number } | null | undefined)?.switch_count;
+        if (!cancelled && typeof count === 'number') setSwitchCount(count);
+      })
+      .catch(() => {
+        /* 后端不可用时保持初始 0，仅展示用 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [examId]);
 
   // 切屏检测(原逻辑)
   useEffect(() => {
@@ -249,7 +265,7 @@ const ExamTaking = () => {
             </span>
             <span className="pill pill-ok" id="cam-pill">
               <i className="pill-dot" />
-              监考摄像头已开启
+              摄像头监考演示
             </span>
           </div>
           <div className={`timer${warn ? ' warn' : ''}`}>

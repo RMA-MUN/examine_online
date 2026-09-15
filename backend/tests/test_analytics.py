@@ -13,6 +13,7 @@ from app.models.exam import Exam
 from app.models.exam_record import ExamRecord
 from app.models.question import Question
 from app.models.user import User
+from app.services.teacher_subject_service import assign_subject_to_teacher
 from app.utils.security import create_access_token
 
 
@@ -47,6 +48,7 @@ async def _seed_exam(db: AsyncSession):
     db.add(course)
     await db.commit()
     await db.refresh(course)
+    await assign_subject_to_teacher(db, teacher.id, course.id)
     exam = Exam(
         course_id=course.id,
         title="期中考试",
@@ -124,4 +126,14 @@ async def test_student_forbidden_on_analytics(client, db: AsyncSession):
     resp = await client.get(f"/api/statistics/exam/{exam.id}/questions", headers=_auth_header(student))
     assert resp.status_code == 403
     resp2 = await client.get(f"/api/statistics/exam/{exam.id}/students", headers=_auth_header(student))
+    assert resp2.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_unassigned_teacher_forbidden_on_other_exam(client, db: AsyncSession):
+    exam, _ = await _seed_exam(db)
+    outsider = await _make_user(db, "teacher", "t_outsider")
+    resp = await client.get(f"/api/statistics/exam/{exam.id}/questions", headers=_auth_header(outsider))
+    assert resp.status_code == 403
+    resp2 = await client.get(f"/api/statistics/exam/{exam.id}/students", headers=_auth_header(outsider))
     assert resp2.status_code == 403

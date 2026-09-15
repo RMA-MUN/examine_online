@@ -286,7 +286,7 @@ const Admin = () => {
               <Button
                 type="primary"
                 size="small"
-                onClick={() => message.success('权限已保存（本地演示，后端接口待落地）')}
+                onClick={() => message.info('权限已保存（本地演示，后端接口待落地）')}
               >
                 保存权限
               </Button>
@@ -391,7 +391,7 @@ const Admin = () => {
               >
                 恢复默认
               </Button>
-              <Button type="primary" onClick={() => message.success('参数已保存（本地演示，后端接口待落地）')}>
+              <Button type="primary" onClick={() => message.info('参数已保存（本地演示，后端接口待落地）')}>
                 保存参数
               </Button>
             </div>

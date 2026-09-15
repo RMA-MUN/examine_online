@@ -100,18 +100,18 @@ const Proctoring = () => {
   const handleWarn = (s: MockStudent) => {
     // TODO(backend): 发送警告暂无后端端点，接 GET /api/exams/{id}/events 处置动作后替换
     setWarnedIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]));
-    message.success(`已向 ${s.name} 发送警告（本地演示）`);
+    message.info(`已向 ${s.name} 发送警告（本地演示）`);
   };
 
   const handleForceSubmit = (s: MockStudent) => {
     // TODO(backend): 强制交卷暂无后端端点，接考试记录强制交卷接口后替换
-    message.success(`已对 ${s.name} 下发强制交卷（本地演示）`);
+    message.info(`已对 ${s.name} 下发强制交卷（本地演示）`);
   };
 
   const handleMarkNormal = (s: MockStudent) => {
     // TODO(backend): 标记正常暂无后端端点，接告警处置接口后替换
     setNormalIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]));
-    message.success(`已将 ${s.name} 标记为正常（本地演示）`);
+    message.info(`已将 ${s.name} 标记为正常（本地演示）`);
   };
 
   return (

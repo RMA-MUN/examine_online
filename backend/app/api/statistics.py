@@ -10,6 +10,7 @@ from app.services.analytics_service import (
     get_exam_question_stats as fetch_question_stats,
     get_exam_student_scores as fetch_student_scores,
 )
+from app.services.teacher_subject_service import can_teacher_manage_exam
 from app.services.dashboard_export_service import (
     DashboardExportError,
     allowed_datasets_for_role,
@@ -28,13 +29,21 @@ from app.models.user import User
 
 router = APIRouter(tags=["统计报表"])
 
+async def _ensure_teacher_can_manage_exam(db: AsyncSession, current_user: User, exam_id: int):
+    """校验教师是否具备管理指定考试的权限，不具备则抛出 403；管理员不受限。"""
+    if current_user.role == "teacher" and not await can_teacher_manage_exam(
+        db, current_user.id, exam_id
+    ):
+        raise HTTPException(status_code=403, detail="无权管理该考试")
+
 @router.get("/api/statistics/exam/{exam_id}/questions")
 async def get_exam_question_stats(
     exam_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
-    """逐题统计（平均分/正确率/分布），仅教师/管理员可调用。"""
+    """逐题统计（平均分/正确率/分布），仅教师/管理员可调用；教师需具备该考试的管理权限。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
     data = await fetch_question_stats(db, exam_id)
     return success_response(data=data)
 
@@ -48,7 +57,8 @@ async def get_exam_student_scores(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
-    """学生成绩分页（含排名/切屏/状态），仅教师/管理员可调用。"""
+    """学生成绩分页（含排名/切屏/状态），仅教师/管理员可调用；教师需具备该考试的管理权限。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
     data = await fetch_student_scores(db, exam_id, page, page_size, class_id, keyword)
     return success_response(data=data)
 

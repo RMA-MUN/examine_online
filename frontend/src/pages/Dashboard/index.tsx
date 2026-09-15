@@ -14,7 +14,6 @@ import {
   BarChartOutlined,
   SettingOutlined,
   PlusOutlined,
-  DownloadOutlined,
 } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { exportScores, getDashboard, getScoreExportOptions } from '../../api/statistics';
@@ -102,7 +101,6 @@ const Dashboard = () => {
     }
   });
   const [newExamOpen, setNewExamOpen] = useState(false);
-  const [dailyExporting, setDailyExporting] = useState(false);
   const [examForm] = Form.useForm();
 
   useEffect(() => {
@@ -178,19 +176,6 @@ const Dashboard = () => {
       message.error('导出成绩明细失败');
     } finally {
       setScoreExporting(false);
-    }
-  };
-
-  // TODO(Task8): 换真正日报接口（当前复用成绩导出接口先占位，语义不一致）
-  const handleDailyExport = async () => {
-    setDailyExporting(true);
-    try {
-      const response = await exportScores();
-      downloadDashboardFile(response, '考试运行日报.xlsx');
-    } catch (error) {
-      message.error('导出日报失败');
-    } finally {
-      setDailyExporting(false);
     }
   };
 
@@ -297,13 +282,6 @@ const Dashboard = () => {
             </Button>
           )}
           <Button
-            icon={<DownloadOutlined />}
-            loading={dailyExporting}
-            onClick={handleDailyExport}
-          >
-            导出日报
-          </Button>
-          <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => setNewExamOpen(true)}
@@ -336,6 +314,7 @@ const Dashboard = () => {
         </div>
       </section>
 
+      {/* mock-first：运行表/阅卷进度/feed 暂读 MOCK_OVERVIEW，等后端定稿 progress/clazz/time 口径后再接线（后续 wiring 任务） */}
       <section className="cols" aria-label="实时运行">
         <div className="stack">
           <div className="panel">

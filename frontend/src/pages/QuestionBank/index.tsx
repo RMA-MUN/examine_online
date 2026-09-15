@@ -436,7 +436,7 @@ const QuestionBank = () => {
         onCancel={() => setGenOpen(false)}
         onOk={() => {
           setGenOpen(false);
-          message.success('试卷已生成（本地演示）');
+          message.info('试卷已生成（本地演示）');
         }}
         okText="生成并保存"
         cancelText="取消"
