@@ -107,7 +107,9 @@ async def list_exam_events(
 ):
     """分页查询某场考试的监控事件，仅教师/管理员可调用；教师需有该考试管理权。"""
     await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
-    query = select(MonitorEvent).where(MonitorEvent.exam_id == exam_id)
+    query = select(MonitorEvent).where(
+        MonitorEvent.exam_id == exam_id, MonitorEvent.event_type != "announcement"
+    )
     if record_id is not None:
         query = query.where(MonitorEvent.record_id == record_id)
     query = query.order_by(MonitorEvent.id.desc())
@@ -131,7 +133,7 @@ async def list_record_events(
     await _ensure_teacher_can_manage_exam(db, current_user, record.exam_id)
     result = await db.execute(
         select(MonitorEvent)
-        .where(MonitorEvent.record_id == record_id)
+        .where(MonitorEvent.record_id == record_id, MonitorEvent.event_type != "announcement")
         .order_by(MonitorEvent.id)
     )
     return success_response(data=[_event_to_dict(e) for e in result.scalars().all()])
@@ -150,6 +152,8 @@ async def handle_exam_event(
     ev = await db.get(MonitorEvent, event_id)
     if not ev or ev.exam_id != exam_id:
         raise HTTPException(status_code=404, detail="事件不存在")
+    if ev.event_type == "announcement":
+        raise HTTPException(status_code=400, detail="公告事件不可处置")
     ev.handled_action = payload.action
     ev.handled_by = current_user.id
     await db.commit()

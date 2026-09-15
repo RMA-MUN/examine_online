@@ -147,11 +147,9 @@ const Proctoring = () => {
     return selected?.events ?? [];
   }, [recordEvents, selected]);
 
-  // Drawer 当前记录下首条未处置事件：警告/标记正常优先落到该事件，无事件时回退演示占位
+  // Drawer 当前记录下首条未处置事件：全处置时返 null，不再回退首条，避免重复 PATCH 已处置事件
   const pendingEvent = useMemo(
-    () =>
-      recordEvents?.find((e) => e.handled_action == null) ??
-      (recordEvents && recordEvents.length > 0 ? recordEvents[0] : null),
+    () => recordEvents?.find((e) => e.handled_action == null) ?? null,
     [recordEvents],
   );
 
@@ -166,9 +164,22 @@ const Proctoring = () => {
     if (examId != null && pendingEvent != null) {
       try {
         await axios.patch(`/api/exams/${examId}/events/${pendingEvent.id}/handle`, { action });
+        // 乐观置 handled_action，避免全处置后仍命中旧首条重复 PATCH
+        setRecordEvents((prev) =>
+          prev ? prev.map((e) => (e.id === pendingEvent.id ? { ...e, handled_action: action } : e)) : prev,
+        );
         markLocal();
         message.success(action === 'warn' ? `已向 ${s.name} 发送警告` : `已将 ${s.name} 标记为正常`);
         fetchEvents(examId);
+        // 重拉该记录事件流，与后端处置状态对齐
+        try {
+          const res = (await axios.get(`/api/records/${pendingEvent.record_id}/events`)) as unknown as ApiResponse<
+            MonitorEventItem[]
+          >;
+          if (res?.data) setRecordEvents(res.data);
+        } catch {
+          // 保持乐观值
+        }
         return;
       } catch {
         // 后端不可用时回退演示占位

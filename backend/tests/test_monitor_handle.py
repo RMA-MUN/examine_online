@@ -163,3 +163,25 @@ async def test_handle_event_rejects_invalid_action(client, db: AsyncSession):
         headers=_auth_header(teacher),
     )
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_handle_event_rejects_announcement(client, db: AsyncSession):
+    """F1 隔离公告：handle 通道拒绝处置 announcement 事件（400）。"""
+    teacher, student, exam, record, _ = await _make_setup(db)
+    ann = MonitorEvent(
+        exam_id=exam.id,
+        record_id=record.id,
+        student_id=student.id,
+        event_type="announcement",
+        detail={"message": "剩余 10 分钟"},
+    )
+    db.add(ann)
+    await db.commit()
+    await db.refresh(ann)
+    r = await client.patch(
+        f"/api/exams/{exam.id}/events/{ann.id}/handle",
+        json={"action": "warn"},
+        headers=_auth_header(teacher),
+    )
+    assert r.status_code == 400

@@ -140,9 +140,12 @@ const QuestionBank = () => {
       const n = res?.data?.count ?? res?.data?.imported_count ?? 0;
       message.success(`题库导入成功，共 ${n} 题`);
       await refreshBank();
-    } catch {
-      // 后端不可用/HTTP 4xx-5xx 时保留 mocks 演示数据
-      message.error('题库导入失败，已保留演示数据');
+    } catch (err: unknown) {
+      // HTTP 400 夹带 errors（如行级解析失败）：复用成功分支“第X行”格式透出
+      const errs = (err as { response?: { data?: { data?: { errors?: Array<{ row?: number; error?: string }> } } } })
+        ?.response?.data?.data?.errors;
+      const rows = Array.isArray(errs) ? errs.map((e) => `第${e.row}行${e.error ?? ''}`).join('；') : '';
+      message.error(rows ? `题库导入失败：${rows}` : '题库导入失败，已保留演示数据');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -544,12 +547,12 @@ const QuestionBank = () => {
         </div>
         <div className="gen-field">
           <label htmlFor="paper-name">试卷名称</label>
-          <Input id="paper-name" value={paperName} onChange={(e) => setPaperName(e.target.value)} />
+          <Input id="paper-name" value={paperName} onChange={(e) => setPaperName(e.target.value)} disabled title="P2待接入暂不生效" />
         </div>
         <div className="gen-grid">
           <div className="gen-field">
             <label htmlFor="paper-dur">考试时长（分钟）</label>
-            <Input id="paper-dur" value={duration} onChange={(e) => setDuration(e.target.value)} />
+            <Input id="paper-dur" value={duration} onChange={(e) => setDuration(e.target.value)} disabled title="P2待接入暂不生效" />
           </div>
           <div className="gen-field">
             <label htmlFor="paper-group">发布班级</label>
@@ -557,6 +560,8 @@ const QuestionBank = () => {
               id="paper-group"
               value={publishClass}
               onChange={(v) => setPublishClass(v)}
+              disabled
+              title="P2待接入暂不生效"
               style={{ width: '100%' }}
               options={[{ value: '计科 2401' }, { value: '计科 2402' }, { value: '计科 2401、2402' }].map((o) => ({
                 value: o.value,

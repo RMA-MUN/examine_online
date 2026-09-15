@@ -12,6 +12,7 @@ from app.main import app
 from app.models.course import Course
 from app.models.exam import Exam
 from app.models.exam_record import ExamRecord
+from app.models.monitor_event import MonitorEvent
 from app.models.user import User
 from app.services.teacher_subject_service import assign_subject_to_teacher
 from app.utils.security import create_access_token
@@ -157,3 +158,26 @@ async def test_student_cannot_list_exam_events(client, db: AsyncSession):
         f"/api/exams/{exam.id}/events", headers=_auth_header(student)
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_announcement_invisible_in_monitor_lists(client, db: AsyncSession):
+    """F1 隔离公告：announcement 事件在考试/记录事件列表中不可见，仅经 announcements 轮询可见。"""
+    teacher, student, exam, record = await _make_setup(db)
+    db.add(
+        MonitorEvent(
+            exam_id=exam.id,
+            record_id=record.id,
+            student_id=student.id,
+            event_type="announcement",
+            detail={"message": "剩余 10 分钟"},
+        )
+    )
+    await db.commit()
+    r1 = await client.get(f"/api/exams/{exam.id}/events", headers=_auth_header(teacher))
+    assert r1.status_code == 200
+    assert r1.json()["data"]["total"] == 0
+    assert r1.json()["data"]["items"] == []
+    r2 = await client.get(f"/api/records/{record.id}/events", headers=_auth_header(teacher))
+    assert r2.status_code == 200
+    assert r2.json()["data"] == []
