@@ -22,6 +22,8 @@ interface MonitorEventItem {
   student_id: number;
   event_type: string;
   detail: Record<string, unknown> | null;
+  handled_action?: 'warn' | 'normal' | null;
+  handled_by?: number | null;
   created_at: string;
 }
 
@@ -45,7 +47,7 @@ const Proctoring = () => {
   const [selected, setSelected] = useState<MockStudent | null>(null);
   // Drawer 时间线：优先调真接口 GET /api/records/{id}/events，失败/为空回退 mock
   const [recordEvents, setRecordEvents] = useState<MonitorEventItem[] | null>(null);
-  // TODO(backend): 警告/强制交卷/标记正常暂无对应后端端点，先落本地 state
+  // 处置动作：PATCH /api/exams/{id}/events/{eventId}/handle；失败回退本地 state
   const [warnedIds, setWarnedIds] = useState<string[]>([]);
   const [normalIds, setNormalIds] = useState<string[]>([]);
 
@@ -140,21 +142,72 @@ const Proctoring = () => {
     return selected?.events ?? [];
   }, [recordEvents, selected]);
 
-  const handleWarn = (s: MockStudent) => {
-    // TODO(backend): 发送警告暂无后端端点，接 GET /api/exams/{id}/events 处置动作后替换
-    setWarnedIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]));
-    message.info(`已向 ${s.name} 发送警告（本地演示）`);
+  // Drawer 当前记录下首条未处置事件：警告/标记正常优先落到该事件，无事件时回退本地演示
+  const pendingEvent = useMemo(
+    () =>
+      recordEvents?.find((e) => e.handled_action == null) ??
+      (recordEvents && recordEvents.length > 0 ? recordEvents[0] : null),
+    [recordEvents],
+  );
+
+  const handleEventAction = async (s: MockStudent, action: 'warn' | 'normal') => {
+    const markLocal = () => {
+      if (action === 'warn') {
+        setWarnedIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]));
+      } else {
+        setNormalIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]));
+      }
+    };
+    if (examId != null && pendingEvent != null) {
+      try {
+        await axios.patch(`/api/exams/${examId}/events/${pendingEvent.id}/handle`, { action });
+        markLocal();
+        message.success(action === 'warn' ? `已向 ${s.name} 发送警告` : `已将 ${s.name} 标记为正常`);
+        fetchEvents(examId);
+        return;
+      } catch {
+        // 后端不可用时回退本地演示
+      }
+    }
+    markLocal();
+    message.info(
+      action === 'warn' ? `已向 ${s.name} 发送警告（本地演示）` : `已将 ${s.name} 标记为正常（本地演示）`,
+    );
   };
 
-  const handleForceSubmit = (s: MockStudent) => {
-    // TODO(backend): 强制交卷暂无后端端点，接考试记录强制交卷接口后替换
+  const handleWarn = (s: MockStudent) => {
+    void handleEventAction(s, 'warn');
+  };
+
+  const handleForceSubmit = async (s: MockStudent) => {
+    const recordId = Number(s.id);
+    if (Number.isFinite(recordId)) {
+      try {
+        await axios.post(`/api/records/${recordId}/force-submit`);
+        message.success(`已对 ${s.name} 下发强制交卷`);
+        return;
+      } catch {
+        // 后端不可用时回退本地演示
+      }
+    }
     message.info(`已对 ${s.name} 下发强制交卷（本地演示）`);
   };
 
   const handleMarkNormal = (s: MockStudent) => {
-    // TODO(backend): 标记正常暂无后端端点，接告警处置接口后替换
-    setNormalIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]));
-    message.info(`已将 ${s.name} 标记为正常（本地演示）`);
+    void handleEventAction(s, 'normal');
+  };
+
+  const handleCloseExam = async () => {
+    if (examId == null) {
+      message.warning('演示环境不支持结束考试');
+      return;
+    }
+    try {
+      await axios.put(`/api/exams/${examId}/close`);
+      message.success('已结束本场考试');
+    } catch {
+      message.warning('结束考试失败，当前为演示数据');
+    }
   };
 
   return (
@@ -169,7 +222,7 @@ const Proctoring = () => {
         <div className="toolbar">
           <Button onClick={() => message.info('全屏公告下发为演示按钮')}>下发全屏公告</Button>
           <Button onClick={() => message.info('防作弊策略配置为演示按钮')}>防作弊策略</Button>
-          <Button danger onClick={() => message.warning('演示环境不支持结束考试')}>
+          <Button danger onClick={() => void handleCloseExam()}>
             结束本场考试
           </Button>
         </div>

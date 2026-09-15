@@ -228,7 +228,7 @@ CREATE TABLE IF NOT EXISTS ai_grading_tasks (
         FOREIGN KEY (answer_id) REFERENCES answers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2.12 监控事件（防作弊行为流：切屏/失焦/退出全屏/粘贴/人脸丢失）
+-- 2.12 监控事件（防作弊行为流：切屏/失焦/退出全屏/粘贴/人脸丢失；handled_* 为教师处置留档）
 CREATE TABLE IF NOT EXISTS monitor_events (
     id INT NOT NULL AUTO_INCREMENT,
     exam_id INT NOT NULL,
@@ -236,6 +236,8 @@ CREATE TABLE IF NOT EXISTS monitor_events (
     student_id INT NOT NULL,
     event_type VARCHAR(32) NOT NULL,
     detail JSON NULL,
+    handled_action VARCHAR(16) NULL,
+    handled_by INT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_monitor_exam_record (exam_id, record_id),
@@ -243,7 +245,8 @@ CREATE TABLE IF NOT EXISTS monitor_events (
     KEY idx_monitor_type (event_type),
     CONSTRAINT fk_monitor_exam FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE,
     CONSTRAINT fk_monitor_record FOREIGN KEY (record_id) REFERENCES exam_records (id) ON DELETE CASCADE,
-    CONSTRAINT fk_monitor_student FOREIGN KEY (student_id) REFERENCES users (id)
+    CONSTRAINT fk_monitor_student FOREIGN KEY (student_id) REFERENCES users (id),
+    CONSTRAINT fk_monitor_handled_by FOREIGN KEY (handled_by) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -432,6 +435,28 @@ DEALLOCATE PREPARE statement;
 UPDATE answers
 SET grading_source = 'teacher'
 WHERE grader_id IS NOT NULL AND grading_source = 'pending';
+
+-- 3.18 monitor_events.handled_action 列（事件处置动作：warn=警告, normal=标记正常）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'monitor_events' AND COLUMN_NAME = 'handled_action') = 0,
+    'ALTER TABLE monitor_events ADD COLUMN handled_action VARCHAR(16) NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.19 monitor_events.handled_by 列（处置人 ID，可空）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'monitor_events' AND COLUMN_NAME = 'handled_by') = 0,
+    'ALTER TABLE monitor_events ADD COLUMN handled_by INT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
 
 -- ==== 演示数据（SEED） ====
 

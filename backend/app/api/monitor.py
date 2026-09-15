@@ -27,6 +27,12 @@ class EventCreate(BaseModel):
     detail: Optional[dict] = None
 
 
+class HandleAction(BaseModel):
+    """处置监控事件请求体：warn=发送警告并留档，normal=标记为正常。"""
+
+    action: Literal["warn", "normal"]
+
+
 def _event_to_dict(event: MonitorEvent) -> dict:
     """监控事件 ORM 对象转字典，用于接口返回。"""
     return {
@@ -36,6 +42,8 @@ def _event_to_dict(event: MonitorEvent) -> dict:
         "student_id": event.student_id,
         "event_type": event.event_type,
         "detail": event.detail,
+        "handled_action": event.handled_action,
+        "handled_by": event.handled_by,
         "created_at": event.created_at,
     }
 
@@ -121,3 +129,23 @@ async def list_record_events(
         .order_by(MonitorEvent.id)
     )
     return success_response(data=[_event_to_dict(e) for e in result.scalars().all()])
+
+
+@router.patch("/api/exams/{exam_id}/events/{event_id}/handle")
+async def handle_exam_event(
+    exam_id: int,
+    event_id: int,
+    payload: HandleAction,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"])),
+):
+    """处置某场考试的一条监控事件（警告 / 标记正常），仅教师/管理员可调用；教师需有该考试管理权。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    ev = await db.get(MonitorEvent, event_id)
+    if not ev or ev.exam_id != exam_id:
+        raise HTTPException(status_code=404, detail="事件不存在")
+    ev.handled_action = payload.action
+    ev.handled_by = current_user.id
+    await db.commit()
+    await db.refresh(ev)
+    return success_response(data=_event_to_dict(ev))

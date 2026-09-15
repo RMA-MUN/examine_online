@@ -15,4 +15,6 @@ class MonitorEvent(Base):
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     event_type = Column(String(32), nullable=False, index=True)  # 事件类型：switch=切屏, blur=失焦, fullscreen_exit=退出全屏, paste=粘贴, face_lost=人脸丢失
     detail = Column(JSON, comment="事件附加信息")
+    handled_action = Column(String(16), nullable=True, comment="处置动作：warn=警告, normal=标记正常")
+    handled_by = Column(Integer, ForeignKey("users.id"), nullable=True, comment="处置人ID")
     created_at = Column(DateTime, server_default=func.now())

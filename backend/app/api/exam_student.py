@@ -2,10 +2,14 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Body
 from typing import Optional
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
+from app.models.exam_record import ExamRecord
+from app.models.user import User
 from app.services.exam_student_service import start_exam, get_paper, save_answers, submit_exam, get_my_records
 from app.services.anti_cheat_service import record_switch, get_switch_status
+from app.services.teacher_subject_service import can_teacher_manage_exam
 from app.utils.deps import get_current_user, require_role
 from app.utils.response import success_response, error_response
 from app.models.user import User
@@ -71,6 +75,34 @@ async def submit_exam_action(
     if error:
         return error_response(message=error)
     return success_response(data={"score": record.score})
+
+@router.post("/api/records/{record_id}/force-submit")
+async def force_submit_action(
+    record_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """教师强制交卷：将进行中的考试记录置为已交卷（不受学生侧时长限制），仅教师/管理员可调用；教师需具备该考试的管理权限。"""
+    record = await db.get(ExamRecord, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    if current_user.role == "teacher" and not await can_teacher_manage_exam(
+        db, current_user.id, record.exam_id
+    ):
+        raise HTTPException(status_code=403, detail="无权管理该考试")
+    # 幂等：已交卷/已评分的记录重复调用仍返回当前状态
+    if record.status == "ongoing":
+        record.status = "submitted"
+        record.submit_time = datetime.now()
+        await db.commit()
+        await db.refresh(record)
+    return success_response(data={
+        "record_id": record.id,
+        "exam_id": record.exam_id,
+        "student_id": record.student_id,
+        "status": record.status,
+        "submit_time": record.submit_time,
+    })
 
 @router.post("/api/exams/{exam_id}/switch")
 async def record_switch_action(
