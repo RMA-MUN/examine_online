@@ -81,3 +81,14 @@ export const importQuestionsJson = (examId: number, items: unknown[]) =>
 
 export const reportEvent = (examId: number, event_type: string, detail?: Record<string, unknown>) =>
   axios.post(`/api/exams/${examId}/events`, { event_type, detail: detail ?? null });
+
+export const importBankFile = (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return axios.post('/api/bank/questions/import-file', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+
+export const generatePaperFromBasket = (examId: number, bankIds: number[]) =>
+  axios.post(`/api/exams/${examId}/questions/from-bank`, { bank_ids: bankIds });

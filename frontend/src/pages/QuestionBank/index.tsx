@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { App, Button, Input, Modal, Select } from 'antd';
 import axios from '../../api/axios';
+import { generatePaperFromBasket, getExams, importBankFile } from '../../api/exams';
 import type { ApiResponse, Paginated } from '../../types/api';
 import {
   BANK_BLUEPRINT,
@@ -83,20 +84,85 @@ const QuestionBank = () => {
   const [paperName, setPaperName] = useState('《数据结构与算法》期中考试（B 卷）');
   const [duration, setDuration] = useState('120');
   const [publishClass, setPublishClass] = useState('计科 2401');
+  const [examOptions, setExamOptions] = useState<Array<{ value: number; label: string }>>([]);
+  const [targetExamId, setTargetExamId] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const refreshBank = async () => {
+    try {
+      const res = (await axios.get('/api/bank/questions', {
+        params: { page: 1, page_size: 100 },
+      })) as ApiResponse<Paginated<BankApiItem>>;
+      const data = res?.data;
+      if (data && Array.isArray(data.items) && data.items.length > 0) {
+        setRemote(mapApiToMock(data.items));
+      }
+    } catch {
+      // 后端不可用时静默回退到 mocks 演示数据
+    }
+  };
 
   useEffect(() => {
-    axios
-      .get('/api/bank/questions', { params: { page: 1, page_size: 100 } })
-      .then((res: unknown) => {
-        const data = (res as ApiResponse<Paginated<BankApiItem>>)?.data;
-        if (data && Array.isArray(data.items) && data.items.length > 0) {
-          setRemote(mapApiToMock(data.items));
+    void refreshBank();
+  }, []);
+
+  useEffect(() => {
+    if (!genOpen || examOptions.length > 0) return;
+    getExams({ page: 1, page_size: 100 })
+      .then((res) => {
+        const items = res?.data?.items ?? [];
+        if (items.length > 0) {
+          setExamOptions(items.map((e) => ({ value: e.id, label: e.title })));
+          setTargetExamId(items[0].id);
         }
       })
       .catch(() => {
-        // 后端不可用时静默回退到 mocks 演示数据
+        // 后端不可用时保持空下拉，落盘时回退本地演示提示
       });
-  }, []);
+  }, [genOpen, examOptions.length]);
+
+  const handleImportFile = async (file: File) => {
+    setUploading(true);
+    try {
+      await importBankFile(file);
+      message.success('题库导入成功');
+      await refreshBank();
+    } catch {
+      // 后端不可用/解析失败时保留 mocks 演示数据
+      message.error('题库导入失败，已保留本地演示数据');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (targetExamId == null) {
+      message.warning('暂无可选考试（后端不可用），已保留本地演示');
+      return;
+    }
+    const numericIds = basketIds
+      .map((id) => /^B-(\d+)$/.exec(id)?.[1])
+      .filter((v): v is string => v != null)
+      .map(Number);
+    if (numericIds.length === 0) {
+      message.info('当前篮内为本地演示题，无法落盘（请先导入题库）');
+      return;
+    }
+    setGenerating(true);
+    try {
+      // 后端 FromBankRequest 字段为 bank_ids（见 backend/app/schemas/question.py）
+      await generatePaperFromBasket(targetExamId, numericIds);
+      message.success(`已落盘 ${numericIds.length} 题到考试 ${targetExamId}`);
+      setGenOpen(false);
+    } catch {
+      message.error('组卷落盘失败，已保留本地组卷篮');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const byId = useMemo(() => new Map(questions.map((q) => [q.id, q])), [questions]);
 
@@ -195,8 +261,20 @@ const QuestionBank = () => {
           style={{ maxWidth: 320 }}
         />
         <div className="grow" />
-        {/* TODO(backend): 题库导入暂无独立后端端点（题目导入接口需 examId），先留空按钮 */}
-        <Button onClick={() => message.info('导入题库暂未接入（TODO: bank import endpoint）')}>导入题库</Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.docx"
+          hidden
+          aria-label="选择题库文件"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void handleImportFile(f);
+          }}
+        />
+        <Button loading={uploading} onClick={() => fileRef.current?.click()}>
+          导入题库
+        </Button>
         {/* TODO(backend): 新建题目表单接 POST /api/bank/questions，当前为演示提示 */}
         <Button type="primary" onClick={() => message.info('新建题目演示：TODO 接 POST /api/bank/questions 表单')}>
           新建题目
@@ -434,16 +512,25 @@ const QuestionBank = () => {
         title="生成试卷"
         open={genOpen}
         onCancel={() => setGenOpen(false)}
-        onOk={() => {
-          setGenOpen(false);
-          message.info('试卷已生成（本地演示）');
-        }}
+        onOk={() => void handleGenerate()}
         okText="生成并保存"
         cancelText="取消"
+        okButtonProps={{ loading: generating, disabled: basketIds.length === 0 }}
       >
         <p className="page-sub">
           当前组卷篮共 {basketCount} 题，总分 {basketTotal} 分。
         </p>
+        <div className="gen-field">
+          <label htmlFor="paper-exam">落盘目标考试</label>
+          <Select
+            id="paper-exam"
+            value={targetExamId ?? undefined}
+            onChange={(v) => setTargetExamId(v)}
+            style={{ width: '100%' }}
+            placeholder={examOptions.length === 0 ? '暂无考试（后端不可用，仅本地演示）' : '选择考试'}
+            options={examOptions}
+          />
+        </div>
         <div className="gen-field">
           <label htmlFor="paper-name">试卷名称</label>
           <Input id="paper-name" value={paperName} onChange={(e) => setPaperName(e.target.value)} />

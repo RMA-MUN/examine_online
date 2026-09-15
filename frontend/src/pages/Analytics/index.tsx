@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { App, Button, Modal, Select } from 'antd';
-import { exportScores } from '../../api/statistics';
+import { getExams } from '../../api/exams';
+import { exportScores, getExamQuestionStats, getExamStudentScores } from '../../api/statistics';
 import { downloadDashboardFile } from '../../utils/dashboardExport';
 import { ANALYTICS_EXAMS, MOCK_ANALYTICS, type AnalyticsExamKey } from '../../mocks/analytics';
 import './index.css';
@@ -20,7 +21,10 @@ const REPORT_ITEMS = [
 
 const Analytics = () => {
   const { message } = App.useApp();
-  // TODO(backend): 接 GET /api/statistics/exam/{id}/questions 与 /students（聚合已落地，待考试 ID 对齐后替换 mock）
+  // 真实考试下拉（GET /api/exams）优先；失败回退 examKey mock
+  const [examList, setExamList] = useState<Array<{ id: number; title: string }>>([]);
+  const [examId, setExamId] = useState<number | null>(null);
+  const [liveNote, setLiveNote] = useState<string | null>(null);
   const [examKey, setExamKey] = useState<AnalyticsExamKey>(() => {
     try {
       const saved = window.localStorage.getItem('mingjian.analytics.exam');
@@ -36,6 +40,40 @@ const Analytics = () => {
 
   const data = MOCK_ANALYTICS[examKey];
   const maxBin = useMemo(() => Math.max(...data.bins.map((b) => b.n)), [data]);
+
+  useEffect(() => {
+    getExams({ page: 1, page_size: 100 })
+      .then((res) => {
+        const items = res?.data?.items ?? [];
+        if (items.length > 0) {
+          setExamList(items.map((e) => ({ id: e.id, title: e.title })));
+          setExamId((prev) => prev ?? items[0].id);
+        }
+      })
+      .catch(() => {
+        // 后端不可用时静默回退到 mock 考试下拉
+      });
+  }, []);
+
+  useEffect(() => {
+    if (examId == null) return;
+    (async () => {
+      try {
+        const [qStats, sScores] = await Promise.all([
+          getExamQuestionStats(examId),
+          getExamStudentScores(examId, { page: 1, page_size: 1 }),
+        ]);
+        const qn = Array.isArray((qStats as unknown as { data: unknown[] })?.data)
+          ? ((qStats as unknown as { data: unknown[] }).data.length)
+          : 0;
+        const total = (sScores as unknown as { data?: { total?: number } })?.data?.total ?? 0;
+        setLiveNote(`已连接后端统计：${qn} 题 · ${total} 人`);
+      } catch {
+        // 统计接口失败时回退 mock 展示
+        setLiveNote(null);
+      }
+    })();
+  }, [examId]);
 
   const binRows = useMemo(() => {
     let cum = 0;
@@ -84,16 +122,32 @@ const Analytics = () => {
       <section className="page-head">
         <div>
           <h1 className="title-lg">成绩分析与报表</h1>
-          <p className="page-sub">{data.meta}</p>
+          <p className="page-sub">
+            {data.meta}
+            {liveNote != null && <span className="meta">（{liveNote}）</span>}
+          </p>
         </div>
         <div className="toolbar">
-          <Select
-            aria-label="选择考试"
-            style={{ width: 250 }}
-            value={examKey}
-            onChange={handleExamChange}
-            options={ANALYTICS_EXAMS}
-          />
+          {examList.length > 0 ? (
+            <Select
+              aria-label="选择考试"
+              style={{ width: 250 }}
+              value={examId ?? undefined}
+              onChange={(v) => {
+                setExamId(v);
+                setClassFilter('all');
+              }}
+              options={examList.map((e) => ({ value: e.id, label: e.title }))}
+            />
+          ) : (
+            <Select
+              aria-label="选择考试"
+              style={{ width: 250 }}
+              value={examKey}
+              onChange={handleExamChange}
+              options={ANALYTICS_EXAMS}
+            />
+          )}
           <Select
             aria-label="选择班级"
             style={{ width: 150 }}

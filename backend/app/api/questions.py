@@ -260,6 +260,88 @@ async def create_questions_from_bank(
     questions_data = [QuestionResponse.model_validate(q).model_dump() for q in created]
     return success_response(data=questions_data)
 
+@router.post("/api/bank/questions/import-file", status_code=201)
+async def import_bank_questions_from_file(
+    file: UploadFile = FastAPIFile(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """通过上传 Excel/Word 文件批量导入题目到题库（exam_id=null,is_bank=true），复用考试导入解析；仅教师/管理员可调用。"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".xlsx", ".docx"):
+        raise HTTPException(status_code=400, detail="仅支持 .xlsx 或 .docx 格式")
+
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+    if size > MAX_IMPORT_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件大小不能超过 {MAX_IMPORT_FILE_SIZE // (1024 * 1024)}MB",
+        )
+
+    if ext == ".xlsx":
+        questions, errors = await parse_excel(file)
+    else:
+        questions, errors = await parse_word(file)
+
+    if errors:
+        return {
+            "code": 400,
+            "message": "导入失败",
+            "data": {
+                "errors": [
+                    {
+                        "row": e.row,
+                        "type": e.type,
+                        "content_preview": e.content_preview,
+                        "field": e.field,
+                        "current_value": e.current_value,
+                        "error": e.error,
+                        "expected": e.expected
+                    }
+                    for e in errors
+                ]
+            }
+        }
+
+    summary = get_import_summary(questions)
+
+    try:
+        created_questions = []
+        for q in questions:
+            question_data = {
+                "type": q.type.name,
+                "content": q.content,
+                "options": q.options.split("\n") if q.options else None,
+                "answer": q.answer,
+                "score": q.score,
+                "sort_order": len(created_questions),
+                "analysis": q.analysis,
+                "is_bank": True,
+                "source_question_id": None,
+            }
+            question = await create_question(db, None, question_data)
+            created_questions.append(question)
+
+        return {
+            "code": 201,
+            "message": "success",
+            "data": {
+                "count": len(created_questions),
+                "imported_count": len(created_questions),
+                "summary": summary,
+                "questions": [QuestionResponse.model_validate(q).model_dump() for q in created_questions]
+            }
+        }
+    except Exception as e:
+        await db.rollback()
+        logger.exception("导入题库题目失败")
+        raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+
 @router.put("/api/questions/{question_id}")
 async def update_question_info(
     question_id: int,
