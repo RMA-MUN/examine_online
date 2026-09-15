@@ -39,8 +39,7 @@ const Analytics = () => {
   const [exporting, setExporting] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
 
-  // 图表暂渲染 MOCK_ANALYTICS 占位数据；examId 对齐 + questions/students 连通性已验证，
-  // 全量图形切真实聚合（知识点/班级/分数段/D值）待后续迭代对接。
+  // TODO(Task-followup): 图表仍用 MOCK_ANALYTICS 占位，全量切真实聚合（Task4后端已就绪）待另起任务。
   const data = MOCK_ANALYTICS[examKey];
   const maxBin = useMemo(() => Math.max(...data.bins.map((b) => b.n)), [data]);
 
