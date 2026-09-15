@@ -34,6 +34,35 @@ def _auth_header(user: User) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+class _FakeRedis:
+    """内存切屏计数器：实现 incr/ttl/expire/get 的真实语义，测试不依赖外部 Redis。"""
+
+    def __init__(self):
+        self.counts: dict = {}
+
+    async def incr(self, key):
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return self.counts[key]
+
+    async def ttl(self, key):
+        return -1
+
+    async def expire(self, key, seconds):
+        return True
+
+    async def get(self, key):
+        value = self.counts.get(key)
+        return None if value is None else str(value)
+
+
+@pytest.fixture(autouse=True)
+def _fake_switch_redis(monkeypatch):
+    """切屏计数走内存 fake：与 anti_cheat_service 的 Redis 用法同语义。"""
+    import app.services.anti_cheat_service as anti_cheat_module
+
+    monkeypatch.setattr(anti_cheat_module, "redis_client", _FakeRedis(), raising=True)
+
+
 async def _make_setup(db: AsyncSession):
     teacher = User(username="mon_t", password_hash="x", role="teacher", name="T")
     db.add(teacher)
@@ -71,14 +100,17 @@ async def _make_setup(db: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_student_can_post_switch_event(client, db: AsyncSession):
-    _, student, exam, _ = await _make_setup(db)
+    _, student, exam, record = await _make_setup(db)
     resp = await client.post(
         f"/api/exams/{exam.id}/events",
         json={"event_type": "switch"},
         headers=_auth_header(student),
     )
-    assert resp.status_code in (200, 201)
+    assert resp.status_code == 201
     assert resp.json()["data"]["event_type"] == "switch"
+    # 切屏上报经唯一计数源累加：记录的 switch_count 与 Redis 计数同步为 1
+    await db.refresh(record)
+    assert record.switch_count == 1
 
 
 @pytest.mark.asyncio

@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS monitor_events (
     KEY idx_monitor_exam_record (exam_id, record_id),
     KEY idx_monitor_student (student_id),
     KEY idx_monitor_type (event_type),
-    CONSTRAINT fk_monitor_exam FOREIGN KEY (exam_id) REFERENCES exams (id),
+    CONSTRAINT fk_monitor_exam FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE,
     CONSTRAINT fk_monitor_record FOREIGN KEY (record_id) REFERENCES exam_records (id) ON DELETE CASCADE,
     CONSTRAINT fk_monitor_student FOREIGN KEY (student_id) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -182,11 +182,7 @@ const Proctoring = () => {
                 placeholder="选择考试"
                 value={examId ?? undefined}
                 onChange={(v) => setExamId(v)}
-                options={
-                  exams.length > 0
-                    ? exams.map((e) => ({ value: e.id, label: e.title }))
-                    : [{ value: -1, label: MOCK_EXAM_INFO.title }]
-                }
+                options={exams.map((e) => ({ value: e.id, label: e.title }))}
               />
             </div>
           </div>

@@ -8,9 +8,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.exam import Exam
 from app.models.exam_record import ExamRecord
 from app.models.monitor_event import MonitorEvent
 from app.models.user import User
+from app.services.anti_cheat_service import incr_switch_count
 from app.services.teacher_subject_service import can_teacher_manage_exam
 from app.utils.deps import require_role
 from app.utils.response import paginated_response, success_response
@@ -71,9 +73,10 @@ async def create_exam_event(
         detail=payload.detail,
     )
     db.add(event)
-    # 切屏事件同步累加记录的切屏次数，保持与 record_switch 一致的计数口径
+    # 切屏事件经唯一计数源累加（与 record_switch 共用 Redis INCR），消除双写丢增量
     if payload.event_type == "switch":
-        record.switch_count = (record.switch_count or 0) + 1
+        exam = await db.get(Exam, exam_id)
+        record.switch_count = await incr_switch_count(exam_id, current_user.id, exam.duration)
     await db.commit()
     await db.refresh(event)
     return {"code": 201, "message": "success", "data": _event_to_dict(event)}
