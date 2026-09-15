@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import AppLayout from './components/Layout';
 import useAuthStore from './store/auth';
 import useThemeStore, { applyThemeMode } from './store/theme';
+import { getMingjianAntdTokens, MINGJIAN_LIGHT } from './theme/mingjian';
 
 // 管理员页面
 import UserManage from './pages/Admin/UserManage';
@@ -58,14 +59,17 @@ function App() {
     applyThemeMode(mode);
   }, [mode]);
 
+  // 明鉴主题令牌：主色 / 侧边栏底色统一由此产出（亮色优先，暗色深绿衍生）
+  const mjTokens = getMingjianAntdTokens(mode);
+
   return (
     <ConfigProvider
       locale={zhCN}
       theme={{
         algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
-          colorPrimary: isDark ? '#6B9ECF' : '#3D5A80',
-          colorInfo: isDark ? '#6B9ECF' : '#3D5A80',
+          colorPrimary: mjTokens.token.colorPrimary,
+          colorInfo: mjTokens.token.colorInfo,
           colorSuccess: isDark ? '#4CAF6D' : '#52C41A',
           colorWarning: isDark ? '#E0A030' : '#FAAD14',
           colorError: isDark ? '#E06A58' : '#FF4D4F',
@@ -79,7 +83,7 @@ function App() {
         },
         components: {
           Layout: {
-            siderBg: isDark ? '#131C26' : '#1A2332',
+            siderBg: mjTokens.layout.siderBg,
             headerBg: isDark ? '#1E2A3A' : '#FFFFFF',
             headerHeight: 64,
             bodyBg: isDark ? '#16202C' : '#F0F2F5',
@@ -89,7 +93,8 @@ function App() {
             darkItemColor: isDark ? '#94A6BC' : '#8B9BB4',
             darkItemHoverBg: isDark ? '#24344A' : '#2A3A4E',
             darkItemHoverColor: '#FFFFFF',
-            darkItemSelectedBg: isDark ? '#3A6FA5' : '#3D5A80',
+            // 选中项白字：用深绿保证对比度（暗色 accent #5FB87E 配白字仅 ~2.4:1）
+            darkItemSelectedBg: MINGJIAN_LIGHT.primary,
             darkItemSelectedColor: '#FFFFFF',
             itemBorderRadius: 8,
             itemMarginInline: 8,
