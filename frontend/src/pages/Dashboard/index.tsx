@@ -132,6 +132,7 @@ const Dashboard = () => {
   };
 
   // 接口成功时用真实数覆盖对应 KPI，取不到的档位继续读 mock
+  // TODO(Task8): online/peak/eta/alerts 待 get_dashboard_data 扩展字段覆盖
   const kpi = useMemo(() => {
     const base = { ...OVERVIEW_RANGE[range] };
     if (data?.role === 'teacher') {
@@ -175,6 +176,7 @@ const Dashboard = () => {
     }
   };
 
+  // TODO(Task8): 换真正日报接口（当前复用成绩导出接口先占位，语义不一致）
   const handleDailyExport = async () => {
     setDailyExporting(true);
     try {
@@ -419,7 +421,10 @@ const Dashboard = () => {
               tabIndex={0}
               onClick={() => navigate(mod.route)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') navigate(mod.route);
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  navigate(mod.route);
+                }
               }}
             >
               <div className="mod-top">
