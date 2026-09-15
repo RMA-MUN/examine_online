@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.redis_client import redis_client
 from app.models.exam import Exam
 from app.models.exam_record import ExamRecord
+from app.models.monitor_event import MonitorEvent
 
 async def record_switch(db: AsyncSession, exam_id: int, student_id: int):
     """记录一次切屏行为并同步数据库计数。
@@ -36,6 +37,14 @@ async def record_switch(db: AsyncSession, exam_id: int, student_id: int):
     record = result.scalar_one_or_none()
     if record:
         record.switch_count = count
+        # 同步写入一条切屏监控事件，保持计数与事件流一致（旧的计数行为不变）
+        db.add(MonitorEvent(
+            exam_id=exam_id,
+            record_id=record.id,
+            student_id=student_id,
+            event_type="switch",
+            detail=None,
+        ))
         await db.commit()
 
     # 检查是否超过最大次数

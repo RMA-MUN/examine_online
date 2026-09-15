@@ -20,7 +20,7 @@ CREATE DATABASE IF NOT EXISTS exam_system
 USE exam_system;
 
 -- ----------------------------------------------------------------------------
--- 2. 创建全部数据表（11 张，均 IF NOT EXISTS，顺序满足外键依赖）
+-- 2. 创建全部数据表（12 张，均 IF NOT EXISTS，顺序满足外键依赖）
 -- ----------------------------------------------------------------------------
 
 -- 2.1 班级
@@ -218,6 +218,24 @@ CREATE TABLE IF NOT EXISTS ai_grading_tasks (
     KEY ix_ai_grading_tasks_status_available_at (status, available_at),
     CONSTRAINT fk_ai_grading_tasks_answer
         FOREIGN KEY (answer_id) REFERENCES answers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.12 监控事件（防作弊行为流：切屏/失焦/退出全屏/粘贴/人脸丢失）
+CREATE TABLE IF NOT EXISTS monitor_events (
+    id INT NOT NULL AUTO_INCREMENT,
+    exam_id INT NOT NULL,
+    record_id INT NOT NULL,
+    student_id INT NOT NULL,
+    event_type VARCHAR(32) NOT NULL,
+    detail JSON NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_monitor_exam_record (exam_id, record_id),
+    KEY idx_monitor_student (student_id),
+    KEY idx_monitor_type (event_type),
+    CONSTRAINT fk_monitor_exam FOREIGN KEY (exam_id) REFERENCES exams (id),
+    CONSTRAINT fk_monitor_record FOREIGN KEY (record_id) REFERENCES exam_records (id) ON DELETE CASCADE,
+    CONSTRAINT fk_monitor_student FOREIGN KEY (student_id) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------

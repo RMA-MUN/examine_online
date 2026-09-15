@@ -9,8 +9,10 @@ from app.models.class_ import SchoolClass
 from app.models.teacher_subject import TeacherSubject
 from app.models.exam_class import ExamClass
 from app.models.exam_student import ExamStudent
+from app.models.monitor_event import MonitorEvent
 
 __all__ = [
     "User", "Course", "Exam", "Question", "ExamRecord", "Answer",
     "AiGradingTask", "SchoolClass", "TeacherSubject", "ExamClass", "ExamStudent",
+    "MonitorEvent",
 ]

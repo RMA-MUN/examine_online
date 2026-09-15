@@ -31,6 +31,9 @@ import MyRecords from './pages/Student/MyRecords';
 // 仪表盘
 import Dashboard from './pages/Dashboard';
 
+// 考试监控与防作弊
+import Proctoring from './pages/Proctoring';
+
 import type { ReactNode } from 'react';
 
 const PrivateRoute = ({ children }: { children: ReactNode }) => {
@@ -138,7 +141,7 @@ function App() {
               <Route path="my-records" element={<MyRecords />} />
               <Route path="courses" element={<CourseManage />} />
               <Route path="grading" element={<Grading />} />
-              <Route path="proctoring" element={<RequireRole roles={['teacher', 'admin']}><Placeholder /></RequireRole>} />
+              <Route path="proctoring" element={<RequireRole roles={['teacher', 'admin']}><Proctoring /></RequireRole>} />
               <Route path="question-bank" element={<RequireRole roles={['teacher', 'admin']}><Placeholder /></RequireRole>} />
               <Route path="analytics" element={<RequireRole roles={['teacher', 'admin']}><Placeholder /></RequireRole>} />
               <Route path="admin" element={<RequireRole roles={['admin']}><Placeholder /></RequireRole>} />
