@@ -102,10 +102,10 @@ CREATE TABLE IF NOT EXISTS exams (
     CONSTRAINT fk_exams_course FOREIGN KEY (course_id) REFERENCES courses (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2.6 题目（含简答题 AI 评分要点 grading_rubric）
+-- 2.6 题目（含简答题 AI 评分要点 grading_rubric + 题库列；exam_id 可空以支持题库题）
 CREATE TABLE IF NOT EXISTS questions (
     id INT NOT NULL AUTO_INCREMENT,
-    exam_id INT NOT NULL,
+    exam_id INT NULL,
     type ENUM('single', 'multiple', 'judge', 'blank', 'essay') NOT NULL,
     content TEXT NOT NULL,
     options TEXT NULL,
@@ -114,11 +114,19 @@ CREATE TABLE IF NOT EXISTS questions (
     sort_order INT DEFAULT 0,
     analysis TEXT NULL,
     grading_rubric JSON NULL,
+    course_id INT NULL,
+    is_bank BOOLEAN NOT NULL DEFAULT FALSE,
+    tags JSON NULL,
+    difficulty ENUM('easy', 'medium', 'hard') NULL,
+    source_question_id INT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_questions_exam (exam_id),
     KEY idx_questions_type (type),
-    CONSTRAINT fk_questions_exam FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE
+    KEY idx_questions_course (course_id),
+    KEY idx_questions_difficulty (difficulty),
+    CONSTRAINT fk_questions_exam FOREIGN KEY (exam_id) REFERENCES exams (id) ON DELETE CASCADE,
+    CONSTRAINT fk_questions_course FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2.7 考试记录
@@ -348,6 +356,72 @@ SET @sql = IF(
     (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answers' AND COLUMN_NAME = 'override_reason') = 0,
     'ALTER TABLE answers ADD COLUMN override_reason TEXT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.12 questions.course_id 列（题库所属学科，可空；先加列）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'questions' AND COLUMN_NAME = 'course_id') = 0,
+    'ALTER TABLE questions ADD COLUMN course_id INT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.13 questions.is_bank 列（是否为题库题；存量行回填为 FALSE）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'questions' AND COLUMN_NAME = 'is_bank') = 0,
+    'ALTER TABLE questions ADD COLUMN is_bank BOOLEAN NOT NULL DEFAULT FALSE',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.14 questions.tags 列（知识点标签 JSON，可空）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'questions' AND COLUMN_NAME = 'tags') = 0,
+    'ALTER TABLE questions ADD COLUMN tags JSON NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.15 questions.difficulty 列（难度枚举，可空）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'questions' AND COLUMN_NAME = 'difficulty') = 0,
+    'ALTER TABLE questions ADD COLUMN difficulty ENUM(''easy'',''medium'',''hard'') NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.16 questions.source_question_id 列（从题库复制回指，可空）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'questions' AND COLUMN_NAME = 'source_question_id') = 0,
+    'ALTER TABLE questions ADD COLUMN source_question_id INT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.17 questions.exam_id 改可空（最后执行：存量行 exam_id 全有值，行为零变化；题库题 exam_id 为 NULL）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'questions' AND COLUMN_NAME = 'exam_id' AND IS_NULLABLE = 'NO') = 1,
+    'ALTER TABLE questions MODIFY exam_id INT NULL',
     'SELECT 1'
 );
 PREPARE statement FROM @sql;

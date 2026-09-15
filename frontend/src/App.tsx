@@ -34,6 +34,9 @@ import Dashboard from './pages/Dashboard';
 // 考试监控与防作弊
 import Proctoring from './pages/Proctoring';
 
+// 题库与组卷
+import QuestionBank from './pages/QuestionBank';
+
 import type { ReactNode } from 'react';
 
 const PrivateRoute = ({ children }: { children: ReactNode }) => {
@@ -142,7 +145,7 @@ function App() {
               <Route path="courses" element={<CourseManage />} />
               <Route path="grading" element={<Grading />} />
               <Route path="proctoring" element={<RequireRole roles={['teacher', 'admin']}><Proctoring /></RequireRole>} />
-              <Route path="question-bank" element={<RequireRole roles={['teacher', 'admin']}><Placeholder /></RequireRole>} />
+              <Route path="question-bank" element={<RequireRole roles={['teacher', 'admin']}><QuestionBank /></RequireRole>} />
               <Route path="analytics" element={<RequireRole roles={['teacher', 'admin']}><Placeholder /></RequireRole>} />
               <Route path="admin" element={<RequireRole roles={['admin']}><Placeholder /></RequireRole>} />
               <Route path="profile" element={<Profile />} />

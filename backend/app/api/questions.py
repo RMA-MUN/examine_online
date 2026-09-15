@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File a
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
-from app.schemas.question import QuestionCreate, QuestionUpdate, QuestionResponse, QuestionImport
-from app.services.question_service import get_questions, get_question, create_question, batch_create_questions, update_question, delete_question
+from app.schemas.question import QuestionCreate, QuestionUpdate, QuestionResponse, QuestionImport, BankQuestionCreate, FromBankRequest
+from app.services.question_service import get_questions, get_question, create_question, batch_create_questions, update_question, delete_question, list_bank_questions, copy_bank_questions_to_exam
 from app.services.question_import_service import parse_excel, parse_word, get_import_summary
-from app.services.teacher_subject_service import can_teacher_manage_exam
+from app.services.teacher_subject_service import can_teacher_manage_exam, can_teacher_manage_subject, get_teacher_subjects
+from app.models.exam import Exam
 from app.utils.deps import require_role
 from app.utils.response import success_response, paginated_response
 from app.models.user import User
@@ -187,6 +188,66 @@ async def import_questions(
         db, exam_id, [q.model_dump() for q in import_data.questions]
     )
     questions_data = [QuestionResponse.model_validate(q).model_dump() for q in questions]
+    return success_response(data=questions_data)
+
+@router.get("/api/bank/questions")
+async def list_bank(
+    course_id: int | None = Query(default=None),
+    type: str | None = Query(default=None),
+    difficulty: str | None = Query(default=None),
+    keyword: str | None = Query(default=None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """分页查询题库题目，仅教师/管理员可调用；教师按学科守卫过滤（指定 course_id 时校验单科权限，未指定时仅返回所管学科及公共题）。"""
+    allowed_course_ids = None
+    if current_user.role == "teacher":
+        if course_id is not None:
+            if not await can_teacher_manage_subject(db, current_user.id, course_id):
+                raise HTTPException(status_code=403, detail="无权管理该学科题库")
+        else:
+            subjects = await get_teacher_subjects(db, current_user.id)
+            allowed_course_ids = [c.id for c in subjects]
+    questions, total = await list_bank_questions(
+        db, course_id, type, difficulty, keyword, allowed_course_ids, page, page_size
+    )
+    questions_data = [QuestionResponse.model_validate(q).model_dump() for q in questions]
+    return paginated_response(questions_data, total, page, page_size)
+
+@router.post("/api/bank/questions")
+async def create_bank_question(
+    question_data: BankQuestionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """新建题库题目（exam_id=null,is_bank=true），复用题目创建校验；教师需具备所属学科的管理权限。"""
+    if current_user.role == "teacher" and question_data.course_id is not None:
+        if not await can_teacher_manage_subject(db, current_user.id, question_data.course_id):
+            raise HTTPException(status_code=403, detail="无权管理该学科题库")
+    payload = question_data.model_dump()
+    payload["is_bank"] = True
+    payload["source_question_id"] = None
+    question = await create_question(db, None, payload)
+    return success_response(data=QuestionResponse.model_validate(question).model_dump())
+
+@router.post("/api/exams/{exam_id}/questions/from-bank")
+async def create_questions_from_bank(
+    exam_id: int,
+    body: FromBankRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """从题库复制题目到指定考试：新 exam_id，source_question_id 回指，保留选项/答案/解析/评分要点。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    exam = await db.get(Exam, exam_id)
+    if not exam:
+        raise HTTPException(status_code=404, detail="考试不存在")
+    created, error_ids = await copy_bank_questions_to_exam(db, exam_id, body.bank_ids, exam.course_id)
+    if error_ids is not None:
+        raise HTTPException(status_code=404, detail=f"题库题目不存在或非题库题: {error_ids}")
+    questions_data = [QuestionResponse.model_validate(q).model_dump() for q in created]
     return success_response(data=questions_data)
 
 @router.put("/api/questions/{question_id}")
