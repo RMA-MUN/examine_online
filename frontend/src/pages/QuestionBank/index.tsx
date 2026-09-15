@@ -119,7 +119,7 @@ const QuestionBank = () => {
         }
       })
       .catch(() => {
-        // 后端不可用时保持空下拉，落盘时回退本地演示提示
+        // 后端不可用时保持空下拉，落盘时给出离线占位提示
       });
   }, [genOpen, examOptions.length]);
 
@@ -134,7 +134,7 @@ const QuestionBank = () => {
       if (res?.code !== 200 && res?.code !== 201) {
         const errs = res?.data?.errors;
         const rows = Array.isArray(errs) ? errs.map((e) => `第${e.row}行${e.error ?? ''}`).join('；') : '';
-        message.error(rows ? `题库导入失败：${rows}` : '题库导入失败，已保留本地演示数据');
+        message.error(rows ? `题库导入失败：${rows}` : '题库导入失败，已保留演示数据');
         return;
       }
       const n = res?.data?.count ?? res?.data?.imported_count ?? 0;
@@ -142,7 +142,7 @@ const QuestionBank = () => {
       await refreshBank();
     } catch {
       // 后端不可用/HTTP 4xx-5xx 时保留 mocks 演示数据
-      message.error('题库导入失败，已保留本地演示数据');
+      message.error('题库导入失败，已保留演示数据');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -151,7 +151,7 @@ const QuestionBank = () => {
 
   const handleGenerate = async () => {
     if (targetExamId == null) {
-      message.warning('暂无可选考试（后端不可用），已保留本地演示');
+      message.warning('暂无可选考试（后端不可用），仅演示占位');
       return;
     }
     const numericIds = basketIds
@@ -159,7 +159,7 @@ const QuestionBank = () => {
       .filter((v): v is string => v != null)
       .map(Number);
     if (numericIds.length === 0) {
-      message.info('当前篮内为本地演示题，无法落盘（请先导入题库）');
+      message.info('当前篮内为演示占位题，无法落盘（请先导入题库）');
       return;
     }
     setGenerating(true);
@@ -286,8 +286,8 @@ const QuestionBank = () => {
         <Button loading={uploading} onClick={() => fileRef.current?.click()}>
           导入题库
         </Button>
-        {/* TODO(backend): 新建题目表单接 POST /api/bank/questions，当前为演示提示 */}
-        <Button type="primary" onClick={() => message.info('新建题目演示：TODO 接 POST /api/bank/questions 表单')}>
+        {/* 新建题目表单待对接 POST /api/bank/questions，当前禁用待接入 */}
+        <Button type="primary" disabled title="P2 待接入：新建题目表单待对接 POST /api/bank/questions">
           新建题目
         </Button>
       </div>
@@ -302,9 +302,9 @@ const QuestionBank = () => {
           </p>
         </div>
         <div className="toolbar">
-          <span className="pill pill-info">
+          <span className="pill pill-neutral" title="P2 不做：查重服务未接入，仅演示占位">
             <i className="pill-dot" />
-            题目查重已开启
+            题目查重（演示）
           </span>
           <Select
             aria-label="排序方式"
@@ -415,10 +415,10 @@ const QuestionBank = () => {
                     <Button size="small" onClick={() => addToBasket(q.id)}>
                       加入组卷
                     </Button>
-                    <Button size="small" type="text" onClick={() => message.info('编辑题目为演示按钮')}>
+                    <Button size="small" type="text" disabled title="P2 待接入：题目编辑表单待对接服务端">
                       编辑
                     </Button>
-                    <Button size="small" type="text" onClick={() => message.info('替换同类题为演示按钮')}>
+                    <Button size="small" type="text" disabled title="P3 不做：服务端同类题检索未立项">
                       替换同类题
                     </Button>
                   </div>
@@ -538,7 +538,7 @@ const QuestionBank = () => {
             value={targetExamId ?? undefined}
             onChange={(v) => setTargetExamId(v)}
             style={{ width: '100%' }}
-            placeholder={examOptions.length === 0 ? '暂无考试（后端不可用，仅本地演示）' : '选择考试'}
+            placeholder={examOptions.length === 0 ? '暂无考试（后端不可用，仅演示占位）' : '选择考试'}
             options={examOptions}
           />
         </div>

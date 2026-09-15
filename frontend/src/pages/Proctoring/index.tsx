@@ -147,7 +147,7 @@ const Proctoring = () => {
     return selected?.events ?? [];
   }, [recordEvents, selected]);
 
-  // Drawer 当前记录下首条未处置事件：警告/标记正常优先落到该事件，无事件时回退本地演示
+  // Drawer 当前记录下首条未处置事件：警告/标记正常优先落到该事件，无事件时回退演示占位
   const pendingEvent = useMemo(
     () =>
       recordEvents?.find((e) => e.handled_action == null) ??
@@ -171,12 +171,12 @@ const Proctoring = () => {
         fetchEvents(examId);
         return;
       } catch {
-        // 后端不可用时回退本地演示
+        // 后端不可用时回退演示占位
       }
     }
     markLocal();
     message.info(
-      action === 'warn' ? `已向 ${s.name} 发送警告（本地演示）` : `已将 ${s.name} 标记为正常（本地演示）`,
+      action === 'warn' ? `已向 ${s.name} 发送警告（演示占位）` : `已将 ${s.name} 标记为正常（演示占位）`,
     );
   };
 
@@ -192,10 +192,10 @@ const Proctoring = () => {
         message.success(`已对 ${s.name} 下发强制交卷`);
         return;
       } catch {
-        // 后端不可用时回退本地演示
+        // 后端不可用时回退演示占位
       }
     }
-    message.info(`已对 ${s.name} 下发强制交卷（本地演示）`);
+    message.info(`已对 ${s.name} 下发强制交卷（演示占位）`);
   };
 
   const handleMarkNormal = (s: MockStudent) => {
@@ -257,7 +257,9 @@ const Proctoring = () => {
         </div>
         <div className="toolbar">
           <Button onClick={() => setAnnounceOpen(true)}>下发全屏公告</Button>
-          <Button onClick={() => message.info('防作弊策略配置为演示按钮')}>防作弊策略</Button>
+          <Button disabled title="P2 不做：策略引擎未立项，仅演示占位">
+            防作弊策略
+          </Button>
           <Button danger onClick={() => void handleCloseExam()}>
             结束本场考试
           </Button>
@@ -417,7 +419,7 @@ const Proctoring = () => {
               ))}
             </div>
             <p className="meta wall-note">
-              {usingMock ? '后端事件流不可用，当前为原型演示数据。' : `已连接实时事件流（${events.length} 条）。`}
+              {usingMock ? '后端事件流不可用，当前为本地演示占位。' : `已连接实时事件流（${events.length} 条）。`}
               画面为原型占位示意，实际监考画面由考生端摄像头实时推流。
             </p>
           </div>

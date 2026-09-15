@@ -124,7 +124,14 @@ const Dashboard = () => {
   const fmtNum = (n: number | undefined | null) =>
     n == null ? '—' : n.toLocaleString('en-US');
 
-  // 全部取自 GET /api/statistics/dashboard（含总览扩展 8 字段），无演示数据
+  const runningExams = data?.running_exams ?? [];
+  const grading = data?.grading_progress ?? [];
+  const feed = data?.feed ?? [];
+  const pendingAlerts =
+    data?.alerts ?? feed.filter((f) => f.level === 'danger' || f.level === 'warn').length;
+
+  // 全部取自 GET /api/statistics/dashboard（含总览扩展 8 字段），无演示数据；
+  // kpi.alerts 有真值用真值，否则回退 feed 告警计数，/proctoring 链接受保留
   const kpi = useMemo(() => {
     let running = '—';
     if (data?.role === 'teacher') running = String(data.stats.published_exams);
@@ -132,22 +139,18 @@ const Dashboard = () => {
     else if (data?.role === 'admin') running = String(data.stats.exam_count);
     const upcoming =
       data?.running_exams?.filter((e) => e.status === 'published').length ?? null;
+    const feedCount = (data?.feed ?? []).filter((f) => f.level === 'danger' || f.level === 'warn').length;
+    const alertsVal = data?.alerts ?? (data ? feedCount : null);
     return {
       running,
       online: fmtNum(data?.online),
       peak: fmtNum(data?.peak),
       pending: fmtNum(data?.pending),
       eta: data?.eta == null ? '—' : String(data.eta),
-      alerts: fmtNum(data?.alerts),
+      alerts: alertsVal == null ? '—' : String(alertsVal),
       upcoming,
     };
   }, [data]);
-
-  const runningExams = data?.running_exams ?? [];
-  const grading = data?.grading_progress ?? [];
-  const feed = data?.feed ?? [];
-  const pendingAlerts =
-    data?.alerts ?? feed.filter((f) => f.level === 'danger' || f.level === 'warn').length;
 
   if (loading) {
     return <SkeletonGrid count={4} columns={2} />;

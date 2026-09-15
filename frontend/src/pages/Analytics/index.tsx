@@ -39,8 +39,8 @@ const Analytics = () => {
   const [exporting, setExporting] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
 
-  // TODO(Task4): 图表仍渲染 MOCK_ANALYTICS 演示数据；examId 对齐 + questions/students 连通性已验证，
-  // 全量图形切真实聚合（知识点/班级/分数段/D值）待 Task 4 落地。
+  // 图表暂渲染 MOCK_ANALYTICS 占位数据；examId 对齐 + questions/students 连通性已验证，
+  // 全量图形切真实聚合（知识点/班级/分数段/D值）待后续迭代对接。
   const data = MOCK_ANALYTICS[examKey];
   const maxBin = useMemo(() => Math.max(...data.bins.map((b) => b.n)), [data]);
 
@@ -122,7 +122,7 @@ const Analytics = () => {
 
   const handleReportOk = async () => {
     if (examId == null) {
-      // 后端不可用（mock 考试下拉）时保持本地演示行为
+      // 后端不可用（mock 考试下拉）时保持演示占位行为
       setReportOpen(false);
       message.success('已开始生成报告（演示）');
       return;
@@ -394,28 +394,33 @@ const Analytics = () => {
         <div className="panel">
           <div className="panel-head">
             <span className="title-sm">成绩发布</span>
+            <span className="pill pill-neutral" title="P2 待接入：成绩发布流程未立项，仅占位展示">
+              待接入
+            </span>
           </div>
           <div className="panel-body stack-sm">
             <div className="between">
               <span style={{ fontSize: 13 }}>成绩单推送</span>
-              <span className="pill pill-ok">
-                <i className="pill-dot" />
-                已开启
+              <span className="pill pill-neutral" title="P2 待接入：成绩推送服务未立项">
+                待接入
               </span>
             </div>
             <div className="between">
               <span style={{ fontSize: 13 }}>学生端可见</span>
-              <span className="pill pill-neutral">阅卷全部完成后</span>
+              <span className="pill pill-neutral" title="P2 待接入：学生端可见规则待对接">
+                待接入
+              </span>
             </div>
             <div className="between">
               <span style={{ fontSize: 13 }}>申诉窗口</span>
-              <span className="num meta">成绩发布后 5 个工作日</span>
+              <span className="pill pill-neutral" title="P2 不做：申诉流程未立项">
+                待接入
+              </span>
             </div>
             <div className="between">
               <span style={{ fontSize: 13 }}>教务系统同步</span>
-              <span className="pill pill-info">
-                <i className="pill-dot" />
-                待同步
+              <span className="pill pill-neutral" title="P2 不做：教务系统同步未立项">
+                待接入
               </span>
             </div>
             <div className="between">
