@@ -3,10 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { App as AntdApp, ConfigProvider, theme as antdTheme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import Login from './pages/Login';
-import AppLayout from './components/Layout';
+import MingjianLayout from './components/MingjianLayout';
 import useAuthStore from './store/auth';
 import useThemeStore, { applyThemeMode } from './store/theme';
 import { getMingjianAntdTokens, MINGJIAN_LIGHT } from './theme/mingjian';
+import type { Role } from './store/navigation';
 
 // 管理员页面
 import UserManage from './pages/Admin/UserManage';
@@ -41,6 +42,14 @@ const PrivateRoute = ({ children }: { children: ReactNode }) => {
 const ExamsPage = () => {
   const user = useAuthStore((state) => state.user);
   return user?.role === 'student' ? <ExamList /> : <ExamManage />;
+};
+
+const Placeholder = () => <div style={{ padding: 24 }}>即将上线</div>;
+
+const RequireRole = ({ roles, children }: { roles: Role[]; children: ReactNode }) => {
+  const user = useAuthStore((state) => state.user);
+  if (!user) return <>{children}</>;
+  return roles.includes(user.role) ? <>{children}</> : <Navigate to="/dashboard" replace />;
 };
 
 function App() {
@@ -116,7 +125,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<PrivateRoute><AppLayout /></PrivateRoute>}>
+            <Route path="/" element={<PrivateRoute><MingjianLayout /></PrivateRoute>}>
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="users" element={<UserManage />} />
@@ -129,6 +138,10 @@ function App() {
               <Route path="my-records" element={<MyRecords />} />
               <Route path="courses" element={<CourseManage />} />
               <Route path="grading" element={<Grading />} />
+              <Route path="proctoring" element={<RequireRole roles={['teacher', 'admin']}><Placeholder /></RequireRole>} />
+              <Route path="question-bank" element={<RequireRole roles={['teacher', 'admin']}><Placeholder /></RequireRole>} />
+              <Route path="analytics" element={<RequireRole roles={['teacher', 'admin']}><Placeholder /></RequireRole>} />
+              <Route path="admin" element={<RequireRole roles={['admin']}><Placeholder /></RequireRole>} />
               <Route path="profile" element={<Profile />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>
