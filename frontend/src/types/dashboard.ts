@@ -11,7 +11,11 @@ export interface OverviewExtension {
   eta: number;
   /** 防作弊告警（切屏超限记录数）。 */
   alerts: number;
-  running_exams: Array<{ id: number; title: string; status: string; online: number; total: number }>;
+  running_exams: Array<{
+    id: number; title: string; status: string; online: number; total: number;
+    start_time: string; end_time: string; total_score: number;
+    question_count: number; classes: string[]; progress: number;
+  }>;
   grading_progress: Array<{ exam_id: number; exam_title: string; done: number; total: number; percent: number }>;
   feed: Array<{ level: string; title: string; meta: string }>;
 }

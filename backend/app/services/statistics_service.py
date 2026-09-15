@@ -9,6 +9,8 @@ from app.models.course import Course
 from app.models.user import User
 from app.models.answer import Answer
 from app.models.class_ import SchoolClass
+from app.models.exam_class import ExamClass
+from app.models.question import Question
 
 async def get_exam_statistics(db: AsyncSession, exam_id: int):
     """统计某场考试的整体成绩：人数、平均分、最高/最低分、及格率与分数分布。
@@ -97,7 +99,7 @@ async def _get_overview_extension(db: AsyncSession, course_ids: list[int] | None
     - pending：待批改题目数（Answer.grading_source=pending）
     - eta：pending/300 小时（约 300 份/小时吞吐）
     - alerts：切屏超限记录数（switch_count > Exam.max_switch）
-    - running_exams：进行中/已发布考试（id/title/status/online/total，最多 5 场）
+    - running_exams：进行中/已发布考试（id/title/status/online/total/start_time/end_time/total_score/question_count/classes/progress，最多 5 场）
     - grading_progress：按考试 done/total/percent（done=graded 记录数）
     - feed：最近 4 条动态（level/title/meta）
     """
@@ -167,16 +169,40 @@ async def _get_overview_extension(db: AsyncSession, course_ids: list[int] | None
         )).scalars().all()
         for r in rec_rows:
             per_exam_records.setdefault(r.exam_id, []).append(r)
-    running_exams = [
-        {
-            "id": e.id,
-            "title": e.title,
-            "status": e.status,
-            "online": sum(1 for r in per_exam_records.get(e.id, []) if r.status == "ongoing"),
-            "total": len(per_exam_records.get(e.id, [])),
-        }
-        for e in running_list
-    ]
+    qcount = {}
+    class_names: dict[int, list] = {eid: [] for eid in running_ids}
+    if running_ids:
+        for eid, c in (await db.execute(
+            select(Question.exam_id, func.count()).select_from(Question)
+            .where(Question.exam_id.in_(running_ids)).group_by(Question.exam_id)
+        )).all():
+            qcount[eid] = c
+        for eid, name in (await db.execute(
+            select(ExamClass.exam_id, SchoolClass.name)
+            .join(SchoolClass, SchoolClass.id == ExamClass.class_id)
+            .where(ExamClass.exam_id.in_(running_ids))
+        )).all():
+            class_names.setdefault(eid, []).append(name)
+    running_exams = []
+    for e in running_list:
+        recs = per_exam_records.get(e.id, [])
+        total = len(recs)
+        finished = sum(1 for r in recs if r.status in ("submitted", "graded"))
+        running_exams.append(
+            {
+                "id": e.id,
+                "title": e.title,
+                "status": e.status,
+                "online": sum(1 for r in recs if r.status == "ongoing"),
+                "total": total,
+                "start_time": e.start_time,
+                "end_time": e.end_time,
+                "total_score": e.total_score,
+                "question_count": qcount.get(e.id, 0),
+                "classes": class_names.get(e.id, []),
+                "progress": round(finished / total * 100, 1) if total else 0.0,
+            }
+        )
     grading_progress = []
     for e in running_list:
         recs = per_exam_records.get(e.id, [])

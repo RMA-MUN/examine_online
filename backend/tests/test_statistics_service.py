@@ -69,11 +69,13 @@ def build_responses():
         ScalarResult(3),                           # 12. 总览扩展 today（peak 取大=3）
         ScalarResult(150),                         # 13. 总览扩展 pending（eta=0.5）
         ScalarResult(1),                           # 14. 总览扩展 alerts
-        ScalarResult([SimpleNamespace(id=1, title="期中考试", status="published", start_time="2026-01-02")]),  # 15. running 考试
+        ScalarResult([SimpleNamespace(id=1, title="期中考试", status="published", start_time="2026-01-02", end_time="2026-01-02", total_score=100)]),  # 15. running 考试
         ScalarResult([                             # 16. running 考试记录
             SimpleNamespace(exam_id=1, status="ongoing"),
             SimpleNamespace(exam_id=1, status="graded"),
         ]),
+        RowResult([(1, 20)]),                      # 17. running 考试题数
+        RowResult([(1, "计科2401班")]),             # 18. running 考试班级
         RowResult([(                               # 17. feed 最近动态
             SimpleNamespace(switch_count=1, status="graded", score=80,
                             start_time="2026-01-02", submit_time="2026-01-02"),
@@ -122,7 +124,11 @@ async def test_admin_dashboard_aggregates_all_chart_datasets():
     assert data["eta"] == 0.5
     assert data["alerts"] == 1
     assert data["running_exams"] == [
-        {"id": 1, "title": "期中考试", "status": "published", "online": 1, "total": 2}
+        {
+            "id": 1, "title": "期中考试", "status": "published", "online": 1, "total": 2,
+            "start_time": "2026-01-02", "end_time": "2026-01-02", "total_score": 100,
+            "question_count": 20, "classes": ["计科2401班"], "progress": 50.0,
+        }
     ]
     assert data["grading_progress"] == [
         {"exam_id": 1, "exam_title": "期中考试", "done": 1, "total": 2, "percent": 50.0}
@@ -148,7 +154,9 @@ async def test_admin_dashboard_handles_empty_exam_data():
     responses[13] = ScalarResult(0)   # alerts 空
     responses[14] = ScalarResult([])  # running 空
     responses[15] = ScalarResult([])  # 记录空
-    responses[16] = RowResult([])     # feed 空
+    responses[16] = RowResult([])     # 题数空
+    responses[17] = RowResult([])     # 班级空
+    responses[18] = RowResult([])     # feed 空
     db = FakeSession(responses)
     data = await get_dashboard_data(db, make_admin_user())
 

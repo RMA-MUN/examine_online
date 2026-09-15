@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { App, Row, Col, Button, Modal, Select, Space, Segmented, Form, Input, InputNumber, Checkbox } from 'antd';
+import { App, Row, Col, Button, Modal, Select, Space, Form, Input, InputNumber, Checkbox } from 'antd';
 import {
   FileTextOutlined,
   CheckCircleOutlined,
@@ -30,12 +30,8 @@ import StatCard from '../../components/StatCard';
 import SkeletonGrid from '../../components/SkeletonGrid';
 import EChart from '../../components/EChart';
 import { downloadDashboardFile } from '../../utils/dashboardExport';
-import {
-  MOCK_OVERVIEW,
-  OVERVIEW_RANGE,
-  type ExamStatus,
-  type OverviewRangeKey,
-} from '../../mocks/overview';
+import axios from '../../api/axios';
+import type { ApiResponse, Paginated } from '../../types/api';
 import {
   buildAdminRoleOption,
   buildStudentPassRateOption,
@@ -91,16 +87,9 @@ const Dashboard = () => {
   const [scoreClassId, setScoreClassId] = useState<number | undefined>();
   const [scoreCourseId, setScoreCourseId] = useState<number | undefined>();
   const [scoreExporting, setScoreExporting] = useState(false);
-  // 总览控制台：范围三档先切 mock（照抄参考 RANGE），接口成功再用真实数覆盖
-  const [range, setRange] = useState<OverviewRangeKey>(() => {
-    try {
-      const saved = window.localStorage.getItem('mingjian.dashboard.range');
-      return saved === 'week' || saved === 'term' ? saved : 'today';
-    } catch {
-      return 'today';
-    }
-  });
   const [newExamOpen, setNewExamOpen] = useState(false);
+  // 题库总数（教师/管理员）：静默获取，失败或学生身份时不展示该模块脚注
+  const [bankTotal, setBankTotal] = useState<number | null>(null);
   const [examForm] = Form.useForm();
 
   useEffect(() => {
@@ -110,8 +99,7 @@ const Dashboard = () => {
         const res = await getDashboard();
         setData(res.data);
       } catch (error) {
-        // 演示不断：接口失败用 mock 撑起总览，只给错误提示
-        message.error('获取仪表盘数据失败，已展示演示数据');
+        message.error('获取仪表盘数据失败');
       } finally {
         setLoading(false);
       }
@@ -120,34 +108,46 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleRangeChange = (value: OverviewRangeKey) => {
-    setRange(value);
-    try {
-      window.localStorage.setItem('mingjian.dashboard.range', value);
-    } catch {
-      /* localStorage 不可用时仅本次生效 */
-    }
-  };
+  useEffect(() => {
+    if (!data || data.role === 'student') return;
+    axios
+      .get('/api/bank/questions', { params: { page: 1, page_size: 1 } })
+      .then((res: unknown) => {
+        const total = (res as ApiResponse<Paginated<unknown>>)?.data?.total;
+        if (typeof total === 'number') setBankTotal(total);
+      })
+      .catch(() => {
+        // 后端不可用时不展示题库脚注
+      });
+  }, [data?.role]);
 
-  // 接口成功时用真实数覆盖对应 KPI，取不到的档位继续读 mock（Task 8 扩展字段已落地：online/peak/pending/eta/alerts）
+  const fmtNum = (n: number | undefined | null) =>
+    n == null ? '—' : n.toLocaleString('en-US');
+
+  // 全部取自 GET /api/statistics/dashboard（含总览扩展 8 字段），无演示数据
   const kpi = useMemo(() => {
-    const base = { ...OVERVIEW_RANGE[range] };
-    if (data?.role === 'teacher') {
-      base.running = String(data.stats.published_exams);
-      base.pending = (data.pending ?? data.stats.pending_grading_count).toLocaleString('en-US');
-    } else if (data?.role === 'student') {
-      base.running = String(data.stats.available_exams);
-      if (data.pending != null) base.pending = data.pending.toLocaleString('en-US');
-    } else if (data?.role === 'admin') {
-      base.running = String(data.stats.exam_count);
-      if (data.pending != null) base.pending = data.pending.toLocaleString('en-US');
-    }
-    if (data?.online != null) base.online = data.online.toLocaleString('en-US');
-    if (data?.peak != null) base.peak = data.peak.toLocaleString('en-US');
-    if (data?.eta != null) base.eta = String(data.eta);
-    if (data?.alerts != null) base.alerts = String(data.alerts);
-    return base;
-  }, [range, data]);
+    let running = '—';
+    if (data?.role === 'teacher') running = String(data.stats.published_exams);
+    else if (data?.role === 'student') running = String(data.stats.available_exams);
+    else if (data?.role === 'admin') running = String(data.stats.exam_count);
+    const upcoming =
+      data?.running_exams?.filter((e) => e.status === 'published').length ?? null;
+    return {
+      running,
+      online: fmtNum(data?.online),
+      peak: fmtNum(data?.peak),
+      pending: fmtNum(data?.pending),
+      eta: data?.eta == null ? '—' : String(data.eta),
+      alerts: fmtNum(data?.alerts),
+      upcoming,
+    };
+  }, [data]);
+
+  const runningExams = data?.running_exams ?? [];
+  const grading = data?.grading_progress ?? [];
+  const feed = data?.feed ?? [];
+  const pendingAlerts =
+    data?.alerts ?? feed.filter((f) => f.level === 'danger' || f.level === 'warn').length;
 
   if (loading) {
     return <SkeletonGrid count={4} columns={2} />;
@@ -191,19 +191,28 @@ const Dashboard = () => {
     }
   };
 
-  const examStatusPill: Record<ExamStatus, string> = {
-    running: 'pill-ok',
-    pending: 'pill-info',
-    finished: 'pill-neutral',
+  const examStatusMeta: Record<string, { cls: string; text: string }> = {
+    ongoing: { cls: 'pill-ok', text: '进行中' },
+    published: { cls: 'pill-info', text: '待开始' },
+    finished: { cls: 'pill-neutral', text: '已结束' },
   };
 
-  const modules = [
+  const feedIcon: Record<string, string> = { danger: '!', warn: '!', info: 'i', ok: '✓' };
+
+  const adminUserSum =
+    data?.role === 'admin'
+      ? data.stats.student_count + data.stats.teacher_count + data.stats.admin_count
+      : null;
+  const modules: Array<{
+    key: string; no: string; title: string; desc: string; foot: string | null;
+    icon: React.ReactNode; route: string;
+  }> = [
     {
       key: 'student-exam',
       no: '模块 01',
       title: '学生考试端',
       desc: '在线作答与答题卡导航，含倒计时、题目标记、自动保存与切屏记录。',
-      foot: '118 人在线 · 1 场进行中',
+      foot: `${kpi.online} 人在线 · ${runningExams.length} 场进行中`,
       icon: <FileTextOutlined />,
       route: '/exams',
     },
@@ -212,7 +221,7 @@ const Dashboard = () => {
       no: '模块 02',
       title: '教师阅卷端',
       desc: '按题或按人流转，评分点逐项勾选、评语模板、双评与仲裁复核。',
-      foot: '待阅 1,246 份 · 12 人在线',
+      foot: `待阅 ${kpi.pending} 份`,
       icon: <AuditOutlined />,
       route: '/grading',
     },
@@ -221,7 +230,7 @@ const Dashboard = () => {
       no: '模块 03',
       title: '考试监控与防作弊',
       desc: '实时监控墙、异常行为告警分级、行为时间线与处置动作留痕。',
-      foot: '2 条待处理告警',
+      foot: `${kpi.alerts} 条待处理告警`,
       icon: <EyeOutlined />,
       route: '/proctoring',
     },
@@ -230,7 +239,7 @@ const Dashboard = () => {
       no: '模块 04',
       title: '题库与组卷',
       desc: '按章节、知识点、难度与题型检索，配额组卷并生成试卷原卷。',
-      foot: '题目 12,480 道 · 试卷模板 24 套',
+      foot: bankTotal != null ? `题目 ${bankTotal.toLocaleString('en-US')} 道` : null,
       icon: <BookOutlined />,
       route: '/question-bank',
     },
@@ -239,7 +248,7 @@ const Dashboard = () => {
       no: '模块 05',
       title: '成绩分析与报表',
       desc: '分数分布、题目难度与区分度、知识点掌握度，支持导出成绩单。',
-      foot: '本周 6 场考试',
+      foot: `进行中 ${runningExams.length} 场`,
       icon: <BarChartOutlined />,
       route: '/analytics',
     },
@@ -248,7 +257,7 @@ const Dashboard = () => {
       no: '模块 06',
       title: '系统管理',
       desc: '用户与组织、角色权限矩阵、考试参数与操作审计日志。',
-      foot: '账号 3,214 个 · 5 个角色',
+      foot: adminUserSum != null ? `账号 ${adminUserSum.toLocaleString('en-US')} 个 · 3 个角色` : null,
       icon: <SettingOutlined />,
       route: '/admin',
     },
@@ -262,16 +271,7 @@ const Dashboard = () => {
           <p className="page-sub">教务处 · 第 3 教学周{user?.name || user?.username ? ` · 你好，${user?.name || user?.username}` : ''}</p>
         </div>
         <div className="toolbar">
-          <Segmented
-            aria-label="统计范围"
-            value={range}
-            onChange={(value) => handleRangeChange(value as OverviewRangeKey)}
-            options={[
-              { label: '今日', value: 'today' },
-              { label: '本周', value: 'week' },
-              { label: '本学期', value: 'term' },
-            ]}
-          />
+          <span className="meta">实时快照</span>
           {!isStudent && (
             <Button
               icon={<FileExcelOutlined />}
@@ -295,7 +295,7 @@ const Dashboard = () => {
         <div className="kpi" data-testid="kpi-running">
           <div className="label">进行中考试</div>
           <div className="kpi-num">{kpi.running}</div>
-          <div className="kpi-foot"><span className="pill pill-ok"><i className="pill-dot" />正常</span> 2 场待开始</div>
+          <div className="kpi-foot"><span className="pill pill-ok"><i className="pill-dot" />正常</span>{kpi.upcoming != null ? ` ${kpi.upcoming} 场待开始` : ''}</div>
         </div>
         <div className="kpi" data-testid="kpi-online">
           <div className="label">在线考生</div>
@@ -310,11 +310,10 @@ const Dashboard = () => {
         <div className="kpi" data-testid="kpi-alerts">
           <div className="label">防作弊告警</div>
           <div className="kpi-num">{kpi.alerts}</div>
-          <div className="kpi-foot"><span className="pill pill-warn"><i className="pill-dot" />待处理 {kpi.alerts}</span> 已处置 5</div>
+          <div className="kpi-foot"><span className="pill pill-warn"><i className="pill-dot" />待处理 {kpi.alerts}</span></div>
         </div>
       </section>
 
-      {/* mock-first：运行表/阅卷进度/feed 暂读 MOCK_OVERVIEW，等后端定稿 progress/clazz/time 口径后再接线（后续 wiring 任务） */}
       <section className="cols" aria-label="实时运行">
         <div className="stack">
           <div className="panel">
@@ -330,21 +329,32 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {MOCK_OVERVIEW.exams.map((exam) => (
-                    <tr key={exam.title}>
-                      <td><div className="cell-strong">{exam.title}</div><div className="meta">{exam.meta}</div></td>
-                      <td>{exam.clazz}</td>
-                      <td className="num">{exam.time}</td>
-                      <td>
-                        <div className="row" style={{ gap: 8 }}>
-                          <div className="bar grow"><i style={{ width: `${exam.progress}%` }} /></div>
-                          <span className="num meta">{exam.progress}%</span>
-                        </div>
+                  {runningExams.length === 0 ? (
+                    <tr>
+                      <td colSpan={6}>
+                        <EmptyState title="暂无进行中的考试" description="发布考试后会显示在这里" />
                       </td>
-                      <td className="cell-num">{exam.online} / {exam.total}</td>
-                      <td><span className={`pill ${examStatusPill[exam.status]}`}><i className="pill-dot" />{exam.statusText}</span></td>
                     </tr>
-                  ))}
+                  ) : (
+                    runningExams.map((exam) => {
+                      const meta = examStatusMeta[exam.status] ?? { cls: 'pill-neutral', text: exam.status };
+                      return (
+                        <tr key={exam.id}>
+                          <td><div className="cell-strong">{exam.title}</div><div className="meta">{exam.question_count} 题 · {exam.total_score} 分</div></td>
+                          <td>{exam.classes.length > 0 ? exam.classes.join('、') : '—'}</td>
+                          <td className="num">{dayjs(exam.start_time).format('MM-DD HH:mm')}–{dayjs(exam.end_time).format('HH:mm')}</td>
+                          <td>
+                            <div className="row" style={{ gap: 8 }}>
+                              <div className="bar grow"><i style={{ width: `${exam.progress}%` }} /></div>
+                              <span className="num meta">{exam.progress}%</span>
+                            </div>
+                          </td>
+                          <td className="cell-num">{exam.online} / {exam.total}</td>
+                          <td><span className={`pill ${meta.cls}`}><i className="pill-dot" />{meta.text}</span></td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -356,15 +366,19 @@ const Dashboard = () => {
               <Link className="link" to="/grading">进入阅卷工作台</Link>
             </div>
             <div className="panel-body stack-sm">
-              {MOCK_OVERVIEW.grading.map((item) => (
-                <div key={item.title}>
-                  <div className="between" style={{ marginBottom: 6 }}>
-                    <span style={{ fontSize: 13 }}>{item.title}</span>
-                    <span className="num meta">{item.done.toLocaleString('en-US')} / {item.total.toLocaleString('en-US')}</span>
+              {grading.length === 0 ? (
+                <EmptyState title="暂无阅卷进度" description="有进行中的考试后会显示在这里" />
+              ) : (
+                grading.map((item) => (
+                  <div key={item.exam_id}>
+                    <div className="between" style={{ marginBottom: 6 }}>
+                      <span style={{ fontSize: 13 }}>{item.exam_title}</span>
+                      <span className="num meta">{item.done.toLocaleString('en-US')} / {item.total.toLocaleString('en-US')}</span>
+                    </div>
+                    <div className="bar-thick"><i style={{ width: `${item.percent}%` }} /></div>
                   </div>
-                  <div className="bar-thick"><i style={{ width: `${item.percent}%` }} /></div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -372,20 +386,24 @@ const Dashboard = () => {
         <div className="panel" style={{ maxHeight: '100%' }}>
           <div className="panel-head">
             <span className="title-sm">需要关注</span>
-            <span className="pill pill-warn"><i className="pill-dot" />2 条待处理</span>
+            <span className="pill pill-warn"><i className="pill-dot" />{pendingAlerts} 条待处理</span>
           </div>
           <div className="panel-body flush">
-            <div className="feed">
-              {MOCK_OVERVIEW.feed.map((item) => (
-                <div className="feed-item" key={item.title}>
-                  <div className={`feed-ico ico-${item.level}`}>{item.icon}</div>
-                  <div>
-                    <div className="feed-t">{item.title}</div>
-                    <div className="feed-m">{item.meta}</div>
+            {feed.length === 0 ? (
+              <EmptyState title="暂无动态" description="有考试动态后会显示在这里" />
+            ) : (
+              <div className="feed">
+                {feed.map((item) => (
+                  <div className="feed-item" key={`${item.title}-${item.meta}`}>
+                    <div className={`feed-ico ico-${item.level}`}>{feedIcon[item.level] ?? 'i'}</div>
+                    <div>
+                      <div className="feed-t">{item.title}</div>
+                      <div className="feed-m">{item.meta}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -420,7 +438,7 @@ const Dashboard = () => {
                 <p style={{ marginTop: 6 }}>{mod.desc}</p>
               </div>
               <div className="mod-foot">
-                <span className="meta">{mod.foot}</span>
+                {mod.foot && <span className="meta">{mod.foot}</span>}
                 <span className="mod-go">进入 →</span>
               </div>
             </div>
