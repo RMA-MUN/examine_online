@@ -7,8 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.services.statistics_service import get_exam_statistics, export_exam_scores, get_dashboard_data
 from app.services.analytics_service import (
+    get_class_compare as fetch_class_compare,
+    get_discrimination as fetch_discrimination,
     get_exam_question_stats as fetch_question_stats,
     get_exam_student_scores as fetch_student_scores,
+    get_knowledge_stats as fetch_knowledge_stats,
+    get_score_bins as fetch_score_bins,
 )
 from app.services.teacher_subject_service import can_teacher_manage_exam
 from app.services.dashboard_export_service import (
@@ -39,13 +43,70 @@ async def _ensure_teacher_can_manage_exam(db: AsyncSession, current_user: User, 
 @router.get("/api/statistics/exam/{exam_id}/questions")
 async def get_exam_question_stats(
     exam_id: int,
+    include: str | None = Query(default=None, description="逗号分隔的聚合展开项：knowledge,classes,bins,discrimination"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
-    """逐题统计（平均分/正确率/分布），仅教师/管理员可调用；教师需具备该考试的管理权限。"""
+    """逐题统计（平均分/正确率/分布+D/知识点），仅教师/管理员可调用；教师需具备该考试的管理权限。
+
+    向后兼容：不带 include 时 data 为原逐题数组（元素仅新增 knowledge/p/d 字段）；
+    带 include 时 data 为 {"items": [...], "knowledge"?, "classes"?, "bins"?, "discrimination"?}。
+    """
     await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
-    data = await fetch_question_stats(db, exam_id)
+    items = await fetch_question_stats(db, exam_id)
+    if not include:
+        return success_response(data=items)
+    wanted = {part.strip().lower() for part in include.split(",") if part.strip()}
+    data: dict = {"items": items}
+    if "knowledge" in wanted:
+        data["knowledge"] = await fetch_knowledge_stats(db, exam_id)
+    if "classes" in wanted:
+        data["classes"] = await fetch_class_compare(db, exam_id)
+    if "bins" in wanted:
+        data["bins"] = await fetch_score_bins(db, exam_id)
+    if "discrimination" in wanted:
+        data["discrimination"] = await fetch_discrimination(db, exam_id)
     return success_response(data=data)
+
+@router.get("/api/statistics/exam/{exam_id}/knowledge")
+async def get_exam_knowledge_stats(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """知识点掌握度（按 Question.tags 首项聚合得分率），仅教师/管理员可调用。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    return success_response(data=await fetch_knowledge_stats(db, exam_id))
+
+@router.get("/api/statistics/exam/{exam_id}/classes")
+async def get_exam_class_compare(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """班级对比（平均分/及格率/人数），仅教师/管理员可调用。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    return success_response(data=await fetch_class_compare(db, exam_id))
+
+@router.get("/api/statistics/exam/{exam_id}/bins")
+async def get_exam_score_bins(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """分数段分布（固定 7 段），仅教师/管理员可调用。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    return success_response(data=await fetch_score_bins(db, exam_id))
+
+@router.get("/api/statistics/exam/{exam_id}/discrimination")
+async def get_exam_discrimination(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """逐题难度 P 与区分度 D，仅教师/管理员可调用。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    return success_response(data=await fetch_discrimination(db, exam_id))
 
 @router.get("/api/statistics/exam/{exam_id}/students")
 async def get_exam_student_scores(
