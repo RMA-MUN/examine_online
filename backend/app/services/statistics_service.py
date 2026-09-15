@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime
 from app.models.exam_record import ExamRecord
-from app.models.question import Question
 from app.models.exam import Exam
 from app.models.course import Course
 from app.models.user import User
