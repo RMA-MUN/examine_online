@@ -2,6 +2,7 @@
 
 import json
 import math
+from datetime import datetime
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -200,7 +201,9 @@ async def _high_low_record_ids(db: AsyncSession, exam_id: int) -> tuple[set[int]
     result = await db.execute(select(ExamRecord).where(ExamRecord.exam_id == exam_id))
     records = sorted(
         result.scalars().all(),
-        key=lambda r: (-(r.score if r.score is not None else -1), r.submit_time or r.start_time),
+        # tie-break 全可比值：缺 submit_time 回退 start_time，再缺兜底 datetime.min，
+        # 避免 None<datetime TypeError；语义不变（分数降序，提交早优先）
+        key=lambda r: (-(r.score if r.score is not None else -1), r.submit_time or r.start_time or datetime.min),
     )
     n = len(records)
     if n == 0:

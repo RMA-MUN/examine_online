@@ -204,3 +204,60 @@ async def test_question_stats_include_aggregates(client, db: AsyncSession):
     assert len(data["classes"]) == 2
     assert len(data["bins"]) == 7
     assert sum(b["count"] for b in data["bins"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_discrimination_tie_score_with_missing_submit_time(db: AsyncSession):
+    """回归（Important-2）：同分且一条记录缺 submit_time 时，高低分组 tie-break 不得抛 TypeError。
+
+    排序语义锁定：分数降序，提交早优先（缺 submit_time 回退 start_time）。
+    本例 r1/r2 同分 70，r2 缺 submit_time，回退 start_time 10:05 < r1 submit 11:00，
+    故 r2 排前入高分组：D=(0-10)/10=-1.0。
+    """
+    teacher = await _make_user(db, "teacher", "t_agg_tie")
+    course = Course(name="数据结构", teacher_id=teacher.id)
+    db.add(course)
+    await db.commit()
+    await db.refresh(course)
+    await assign_subject_to_teacher(db, teacher.id, course.id)
+    exam = Exam(
+        course_id=course.id,
+        title="同分考试",
+        start_time=datetime(2026, 8, 10, 10, 0, 0),
+        end_time=datetime(2026, 8, 10, 12, 0, 0),
+        duration=120,
+        total_score=100,
+        pass_score=60,
+        status="finished",
+    )
+    db.add(exam)
+    await db.commit()
+    await db.refresh(exam)
+    q = Question(exam_id=exam.id, type="single", content="单选1", score=10, sort_order=1, tags=["线性表"])
+    db.add(q)
+    await db.commit()
+    await db.refresh(q)
+    s1 = await _make_user(db, "student", "s_tie1")
+    s2 = await _make_user(db, "student", "s_tie2")
+    r1 = ExamRecord(student_id=s1.id, exam_id=exam.id, start_time=datetime(2026, 8, 10, 10, 0, 0),
+                    submit_time=datetime(2026, 8, 10, 11, 0, 0), score=70, status="graded")
+    r2 = ExamRecord(student_id=s2.id, exam_id=exam.id, start_time=datetime(2026, 8, 10, 10, 5, 0),
+                    submit_time=None, score=70, status="ongoing")
+    db.add_all([r1, r2])
+    await db.commit()
+    for r in (r1, r2):
+        await db.refresh(r)
+    db.add_all([
+        Answer(record_id=r1.id, question_id=q.id, student_answer="A", score=10, is_correct=True, grading_source="teacher"),
+        Answer(record_id=r2.id, question_id=q.id, student_answer="B", score=0, is_correct=False, grading_source="teacher"),
+    ])
+    await db.commit()
+
+    from app.services.analytics_service import get_discrimination, get_exam_question_stats
+    out = await get_discrimination(db, exam.id)
+    assert len(out) == 1
+    assert out[0]["question_id"] == q.id
+    assert out[0]["p"] == 0.5
+    assert out[0]["d"] == -1.0
+    items = await get_exam_question_stats(db, exam.id)
+    assert len(items) == 1 and items[0]["d"] == -1.0
