@@ -222,4 +222,10 @@ describe('Dashboard', () => {
     expect(await screen.findByText('获取导出选项失败')).toBeInTheDocument();
     error.mockRestore();
   });
+
+  it('渲染4张KPI与6个功能模组', async () => {
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(await screen.findByTestId('kpi-running')).toBeInTheDocument();
+    expect(screen.getAllByTestId(/module-/).length).toBe(6);
+  });
 });
