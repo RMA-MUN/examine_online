@@ -69,3 +69,15 @@ export const importQuestionsFile = (examId: number, file: File): Promise<ApiResp
     headers: { 'Content-Type': 'multipart/form-data' }
   }) as Promise<ApiResponse<ImportResult> | ImportErrorResponse>;
 };
+
+export const createBankQuestion = (data: QuestionInput): Promise<ApiResponse<Question>> =>
+  axios.post('/api/bank/questions', data) as Promise<ApiResponse<Question>>;
+
+export const createFromBank = (examId: number, question_ids: number[]) =>
+  axios.post(`/api/exams/${examId}/questions/from-bank`, { bank_ids: question_ids });
+
+export const importQuestionsJson = (examId: number, items: unknown[]) =>
+  axios.post(`/api/exams/${examId}/questions/import`, { questions: items });
+
+export const reportEvent = (examId: number, event_type: string, detail?: Record<string, unknown>) =>
+  axios.post(`/api/exams/${examId}/events`, { event_type, detail: detail ?? null });

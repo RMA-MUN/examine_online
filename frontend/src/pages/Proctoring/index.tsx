@@ -43,6 +43,8 @@ const Proctoring = () => {
   const [events, setEvents] = useState<MonitorEventItem[]>([]);
   const [filter, setFilter] = useState<WallFilter>('all');
   const [selected, setSelected] = useState<MockStudent | null>(null);
+  // Drawer 时间线：优先调真接口 GET /api/records/{id}/events，失败/为空回退 mock
+  const [recordEvents, setRecordEvents] = useState<MonitorEventItem[] | null>(null);
   // TODO(backend): 警告/强制交卷/标记正常暂无对应后端端点，先落本地 state
   const [warnedIds, setWarnedIds] = useState<string[]>([]);
   const [normalIds, setNormalIds] = useState<string[]>([]);
@@ -96,6 +98,47 @@ const Proctoring = () => {
   const examTitle = exams.find((e) => e.id === examId)?.title ?? MOCK_EXAM_INFO.title;
 
   const openDrawer = (s: MockStudent) => setSelected(s);
+
+  useEffect(() => {
+    if (selected == null) {
+      setRecordEvents(null);
+      return;
+    }
+    const recordId = Number(selected.id);
+    if (!Number.isFinite(recordId)) {
+      setRecordEvents(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = (await axios.get(`/api/records/${recordId}/events`)) as unknown as ApiResponse<
+          MonitorEventItem[]
+        >;
+        if (!cancelled) setRecordEvents(res?.data ?? []);
+      } catch {
+        if (!cancelled) setRecordEvents(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const drawerTimeline = useMemo(() => {
+    if (recordEvents && recordEvents.length > 0) {
+      return recordEvents.map((e) => ({
+        k: (e.event_type === 'face_lost' || e.event_type === 'switch' ? 'danger' : 'warn') as
+          | 'danger'
+          | 'warn'
+          | 'ok',
+        n: EVENT_LABEL[e.event_type] ?? e.event_type,
+        t: e.created_at,
+        m: `记录 #${e.record_id}`,
+      }));
+    }
+    return selected?.events ?? [];
+  }, [recordEvents, selected]);
 
   const handleWarn = (s: MockStudent) => {
     // TODO(backend): 发送警告暂无后端端点，接 GET /api/exams/{id}/events 处置动作后替换
@@ -366,9 +409,9 @@ const Proctoring = () => {
               </div>
             </div>
             <div>
-              <div className="label drawer-label">行为时间线</div>
+              <div className="label drawer-label">行为时间线{recordEvents && recordEvents.length > 0 ? '' : '（演示数据）'}</div>
               <div className="tl">
-                {selected.events.map((ev, idx) => (
+                {drawerTimeline.map((ev, idx) => (
                   <div className={`tl-item ${ev.k}`} key={`${ev.t}-${idx}`}>
                     <div className="tl-t">{ev.n}</div>
                     <div className="tl-m">

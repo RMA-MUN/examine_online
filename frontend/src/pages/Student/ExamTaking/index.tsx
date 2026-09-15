@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { App, Button, Modal } from 'antd';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { getExam, getPaper, saveAnswers, submitExam, recordSwitch, getSwitchStatus } from '../../../api/exams';
+import { getExam, getPaper, saveAnswers, submitExam, recordSwitch, getSwitchStatus, reportEvent } from '../../../api/exams';
 import QuestionRenderer from '../../../components/QuestionRenderer';
 import EmptyState from '../../../components/EmptyState';
 import useAuthStore from '../../../store/auth';
@@ -74,12 +74,21 @@ const ExamTaking = () => {
     };
   }, [examId]);
 
-  // 切屏检测(原逻辑)
+  // 切屏检测(原逻辑)：上报补全——recordSwitch 计数 + events 明细双写，任一失败都不阻塞作答
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.hidden) {
         setSwitchCount((c) => c + 1);
-        await recordSwitch(Number(examId));
+        try {
+          await recordSwitch(Number(examId));
+        } catch {
+          /* 后端不可用时忽略，仅展示用 */
+        }
+        try {
+          await reportEvent(Number(examId), 'switch');
+        } catch {
+          /* 明细上报失败不阻塞作答 */
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
