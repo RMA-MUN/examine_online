@@ -38,9 +38,9 @@ const Login = () => {
         <aside className="login-brand">
           <div className="login-brand-inner">
             <BrandLogo size={56} />
-            <h1 className="login-brand-name">π考</h1>
-            <span className="login-brand-en">πKAO · EXAM SYSTEM</span>
-            <p className="login-brand-slogan">π尺为度 · 考以见真</p>
+            <h1 className="login-brand-name">明鉴</h1>
+            <span className="login-brand-en">MINGJIAN · EXAM & GRADING</span>
+            <p className="login-brand-slogan">在线考试与阅卷系统</p>
           </div>
         </aside>
 

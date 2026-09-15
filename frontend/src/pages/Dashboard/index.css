@@ -10,14 +10,14 @@
   margin-bottom: 16px;
   border-radius: var(--radius-card);
   color: #fff;
-  background: linear-gradient(135deg, #3d5a80, #2c4460);
+  background: linear-gradient(135deg, #2e7d4f, #1e5a37);
   box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
 /* 暗色下横幅同步压暗，否则在深色页面上过亮、像一块贴片 */
 :root[data-theme='dark'] .dashboard-banner {
-  background: linear-gradient(135deg, #2b4361, #1d2f45);
+  background: linear-gradient(135deg, #1e4a30, #173a26);
 }
 
 /* 右侧柔光，给纯色横幅一点纵深 */

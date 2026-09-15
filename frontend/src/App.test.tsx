@@ -3,7 +3,7 @@ import App from './App';
 
 test('renders login page brand slogan', async () => {
   render(<App />);
-  expect(await screen.findByText('π尺为度 · 考以见真')).toBeInTheDocument();
+  expect(await screen.findByText('在线考试与阅卷系统')).toBeInTheDocument();
 });
 
 test('uses one equal responsive label column for login fields', async () => {

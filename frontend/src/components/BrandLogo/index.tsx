@@ -14,12 +14,12 @@ const BrandLogo = ({ size = 32, showName = false }: BrandLogoProps) => (
       width={size}
       height={size}
       role="img"
-      aria-label="π考"
+      aria-label="明鉴"
     >
       <defs>
         <linearGradient id="brand-logo-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#3D5A80" />
-          <stop offset="100%" stopColor="#2C4460" />
+          <stop offset="0%" stopColor="#2E7D4F" />
+          <stop offset="100%" stopColor="#1E5A37" />
         </linearGradient>
       </defs>
       <rect x="0" y="0" width="48" height="48" rx="13" fill="url(#brand-logo-bg)" />
@@ -41,7 +41,7 @@ const BrandLogo = ({ size = 32, showName = false }: BrandLogoProps) => (
         fill="none"
       />
     </svg>
-    {showName && <span className="brand-logo-name">π考</span>}
+    {showName && <span className="brand-logo-name">明鉴</span>}
   </span>
 );
 
