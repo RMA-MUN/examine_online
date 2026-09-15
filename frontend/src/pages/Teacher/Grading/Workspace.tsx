@@ -25,7 +25,8 @@ export interface ScorePoint {
   score: number;
 }
 
-/** 按满分拆出评分点（合计恒等于满分，供 .pt 勾选联动总分）。 */
+/** 按满分拆出评分点（合计恒等于满分，供 .pt 勾选联动总分）。
+ * 占位实现：题库暂无评分点结构，待题库支持 points 字段后改用真实数据。 */
 export const buildPoints = (full: number): ScorePoint[] => {
   if (!full || full <= 0) return [];
   if (full < 5) return [{ id: 'p1', label: '答案正确', score: full }];
@@ -488,6 +489,7 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
                 type="button"
                 className="btn btn-secondary grow"
                 disabled={!current}
+                title="演示：本地流转，后端暂无仲裁接口"
                 onClick={() => {
                   message.info('已标记仲裁，等待复核');
                   onNext?.();
@@ -499,6 +501,7 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
                 type="button"
                 className="btn btn-secondary grow"
                 disabled={!current}
+                title="演示：本地流转，后端暂无仲裁接口"
                 onClick={() => onNext?.()}
               >
                 跳过

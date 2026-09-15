@@ -191,6 +191,7 @@ const Grading = () => {
         </div>
         <div className="toolbar">
           <span className="pill pill-info"><i className="pill-dot" />批次：{examTitle} · {total} 份</span>
+          {/* TODO(backend): 待接口字段——截止时间暂用静态演示值 */}
           <span className="pill pill-neutral">本批次截止 09-17 18:00</span>
         </div>
       </section>
@@ -208,11 +209,13 @@ const Grading = () => {
         </div>
         <div className="kpi">
           <div className="label">平均用时</div>
+          {/* TODO(backend): 待接口字段——平均用时暂用静态演示值 */}
           <div className="kpi-num">42<span style={{ fontSize: 15, fontWeight: 500 }}>秒 / 份</span></div>
           <div className="kpi-foot">较昨日缩短 6 秒</div>
         </div>
         <div className="kpi">
           <div className="label">双评一致性</div>
+          {/* TODO(backend): 待接口字段——一致率暂用静态演示值 */}
           <div className="kpi-num">92<span style={{ fontSize: 15, fontWeight: 500 }}>%</span></div>
           <div className="kpi-foot"><span className="pill pill-ok"><i className="pill-dot" />达标</span> 阈值 85%</div>
         </div>
