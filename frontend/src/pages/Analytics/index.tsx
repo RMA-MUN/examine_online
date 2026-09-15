@@ -38,6 +38,8 @@ const Analytics = () => {
   const [checked, setChecked] = useState<boolean[]>([true, true, true, false]);
   const [exporting, setExporting] = useState(false);
 
+  // TODO(Task4): 图表仍渲染 MOCK_ANALYTICS 演示数据；examId 对齐 + questions/students 连通性已验证，
+  // 全量图形切真实聚合（知识点/班级/分数段/D值）待 Task 4 落地。
   const data = MOCK_ANALYTICS[examKey];
   const maxBin = useMemo(() => Math.max(...data.bins.map((b) => b.n)), [data]);
 
@@ -67,7 +69,7 @@ const Analytics = () => {
           ? ((qStats as unknown as { data: unknown[] }).data.length)
           : 0;
         const total = (sScores as unknown as { data?: { total?: number } })?.data?.total ?? 0;
-        setLiveNote(`已连接后端统计：${qn} 题 · ${total} 人`);
+        setLiveNote(`连通性已验证：${qn} 题 · ${total} 人（图表仍为演示数据，待 Task4 对接）`);
       } catch {
         // 统计接口失败时回退 mock 展示
         setLiveNote(null);

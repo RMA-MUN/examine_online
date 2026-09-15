@@ -3,7 +3,7 @@
 import os
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File as FastAPIFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
@@ -289,24 +289,28 @@ async def import_bank_questions_from_file(
         questions, errors = await parse_word(file)
 
     if errors:
-        return {
-            "code": 400,
-            "message": "导入失败",
-            "data": {
-                "errors": [
-                    {
-                        "row": e.row,
-                        "type": e.type,
-                        "content_preview": e.content_preview,
-                        "field": e.field,
-                        "current_value": e.current_value,
-                        "error": e.error,
-                        "expected": e.expected
-                    }
-                    for e in errors
-                ]
-            }
-        }
+        # 解析失败必须回 HTTP 400（不能沿用装饰器的 201），否则前端拦截器视为成功而误报
+        return JSONResponse(
+            status_code=400,
+            content={
+                "code": 400,
+                "message": "导入失败",
+                "data": {
+                    "errors": [
+                        {
+                            "row": e.row,
+                            "type": e.type,
+                            "content_preview": e.content_preview,
+                            "field": e.field,
+                            "current_value": e.current_value,
+                            "error": e.error,
+                            "expected": e.expected
+                        }
+                        for e in errors
+                    ]
+                },
+            },
+        )
 
     summary = get_import_summary(questions)
 

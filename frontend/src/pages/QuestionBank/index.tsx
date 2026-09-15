@@ -126,11 +126,22 @@ const QuestionBank = () => {
   const handleImportFile = async (file: File) => {
     setUploading(true);
     try {
-      await importBankFile(file);
-      message.success('题库导入成功');
+      const res = (await importBankFile(file)) as unknown as {
+        code?: number;
+        data?: { errors?: Array<{ row?: number; error?: string }>; count?: number; imported_count?: number };
+      };
+      // 后端解析失败回 code 400（HTTP 400 通常走 catch；此处防 HTTP 200 夹带 code 400 的误报）
+      if (res?.code !== 200 && res?.code !== 201) {
+        const errs = res?.data?.errors;
+        const rows = Array.isArray(errs) ? errs.map((e) => `第${e.row}行${e.error ?? ''}`).join('；') : '';
+        message.error(rows ? `题库导入失败：${rows}` : '题库导入失败，已保留本地演示数据');
+        return;
+      }
+      const n = res?.data?.count ?? res?.data?.imported_count ?? 0;
+      message.success(`题库导入成功，共 ${n} 题`);
       await refreshBank();
     } catch {
-      // 后端不可用/解析失败时保留 mocks 演示数据
+      // 后端不可用/HTTP 4xx-5xx 时保留 mocks 演示数据
       message.error('题库导入失败，已保留本地演示数据');
     } finally {
       setUploading(false);

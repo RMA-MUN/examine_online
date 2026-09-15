@@ -93,3 +93,39 @@ async def test_bank_import_rejects_bad_extension(client, db: AsyncSession):
     files = {"file": ("bank.txt", b"not a workbook", "text/plain")}
     r = await client.post("/api/bank/questions/import-file", files=files, headers=_auth_header(teacher))
     assert r.status_code == 400
+
+
+def _make_bank_xlsx_bytes_with_bad_row() -> bytes:
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["题型", "题目内容", "选项", "答案", "分值", "解析"])
+    # 第 2 行：非法题型，解析必须失败且不落盘
+    ws.append(["问答题", "这是什么？", "", "不知道", "5", ""])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_bank_import_parse_error_returns_http_400(client, db: AsyncSession):
+    """解析失败必须回 HTTP 400（而非装饰器的 201），且不写入任何题库题。"""
+    teacher = await _make_user(db, "teacher", "bank_imp_t3")
+    files = {
+        "file": (
+            "bank.xlsx",
+            _make_bank_xlsx_bytes_with_bad_row(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+    r = await client.post("/api/bank/questions/import-file", files=files, headers=_auth_header(teacher))
+    assert r.status_code == 400
+    body = r.json()
+    assert body["code"] == 400
+    errors = body["data"]["errors"]
+    assert len(errors) == 1 and errors[0]["row"] == 2
+
+    r = await client.get("/api/bank/questions", headers=_auth_header(teacher))
+    assert r.status_code == 200
+    assert r.json()["data"]["total"] == 0
