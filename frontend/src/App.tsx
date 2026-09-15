@@ -37,6 +37,12 @@ import Proctoring from './pages/Proctoring';
 // 题库与组卷
 import QuestionBank from './pages/QuestionBank';
 
+// 成绩分析与报表
+import Analytics from './pages/Analytics';
+
+// 系统管理 Tabs 收敛（/users|/classes|/teacher-subjects 保留独立路由，Tabs 内链过去）
+import Admin from './pages/Admin';
+
 import type { ReactNode } from 'react';
 
 const PrivateRoute = ({ children }: { children: ReactNode }) => {
@@ -146,8 +152,8 @@ function App() {
               <Route path="grading" element={<Grading />} />
               <Route path="proctoring" element={<RequireRole roles={['teacher', 'admin']}><Proctoring /></RequireRole>} />
               <Route path="question-bank" element={<RequireRole roles={['teacher', 'admin']}><QuestionBank /></RequireRole>} />
-              <Route path="analytics" element={<RequireRole roles={['teacher', 'admin']}><Placeholder /></RequireRole>} />
-              <Route path="admin" element={<RequireRole roles={['admin']}><Placeholder /></RequireRole>} />
+              <Route path="analytics" element={<RequireRole roles={['teacher', 'admin']}><Analytics /></RequireRole>} />
+              <Route path="admin" element={<RequireRole roles={['admin']}><Admin /></RequireRole>} />
               <Route path="profile" element={<Profile />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>

@@ -131,18 +131,23 @@ const Dashboard = () => {
     }
   };
 
-  // 接口成功时用真实数覆盖对应 KPI，取不到的档位继续读 mock
-  // TODO(Task8): online/peak/eta/alerts 待 get_dashboard_data 扩展字段覆盖
+  // 接口成功时用真实数覆盖对应 KPI，取不到的档位继续读 mock（Task 8 扩展字段已落地：online/peak/pending/eta/alerts）
   const kpi = useMemo(() => {
     const base = { ...OVERVIEW_RANGE[range] };
     if (data?.role === 'teacher') {
       base.running = String(data.stats.published_exams);
-      base.pending = data.stats.pending_grading_count.toLocaleString('en-US');
+      base.pending = (data.pending ?? data.stats.pending_grading_count).toLocaleString('en-US');
     } else if (data?.role === 'student') {
       base.running = String(data.stats.available_exams);
+      if (data.pending != null) base.pending = data.pending.toLocaleString('en-US');
     } else if (data?.role === 'admin') {
       base.running = String(data.stats.exam_count);
+      if (data.pending != null) base.pending = data.pending.toLocaleString('en-US');
     }
+    if (data?.online != null) base.online = data.online.toLocaleString('en-US');
+    if (data?.peak != null) base.peak = data.peak.toLocaleString('en-US');
+    if (data?.eta != null) base.eta = String(data.eta);
+    if (data?.alerts != null) base.alerts = String(data.alerts);
     return base;
   }, [range, data]);
 

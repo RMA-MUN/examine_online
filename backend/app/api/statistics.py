@@ -6,6 +6,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.services.statistics_service import get_exam_statistics, export_exam_scores, get_dashboard_data
+from app.services.analytics_service import (
+    get_exam_question_stats as fetch_question_stats,
+    get_exam_student_scores as fetch_student_scores,
+)
 from app.services.dashboard_export_service import (
     DashboardExportError,
     allowed_datasets_for_role,
@@ -23,6 +27,30 @@ from app.utils.response import success_response
 from app.models.user import User
 
 router = APIRouter(tags=["统计报表"])
+
+@router.get("/api/statistics/exam/{exam_id}/questions")
+async def get_exam_question_stats(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """逐题统计（平均分/正确率/分布），仅教师/管理员可调用。"""
+    data = await fetch_question_stats(db, exam_id)
+    return success_response(data=data)
+
+@router.get("/api/statistics/exam/{exam_id}/students")
+async def get_exam_student_scores(
+    exam_id: int,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    class_id: int | None = Query(default=None),
+    keyword: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """学生成绩分页（含排名/切屏/状态），仅教师/管理员可调用。"""
+    data = await fetch_student_scores(db, exam_id, page, page_size, class_id, keyword)
+    return success_response(data=data)
 
 @router.get("/api/statistics/exam/{exam_id}")
 async def get_exam_stats(
