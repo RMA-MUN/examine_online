@@ -1,160 +1,531 @@
-.exam-taking-topbar {
+/* 学生考试端（明鉴风）：作用域 .mj-exam，内部类名与参考 student-exam.html 保持一致 */
+.mj-exam {
+  background: var(--color-bg);
+  min-height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-  padding: 14px 18px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
+  flex-direction: column;
 }
 
-.exam-taking-info {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-}
-
-.exam-taking-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.exam-taking-progress-text {
-  font-size: 13px;
+.mj-exam .meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
   color: var(--color-text-secondary);
 }
 
-.exam-taking-timer {
-  font-size: 18px;
-  font-weight: 700;
-  /* 倒计时逐秒变化，等宽数字避免数字宽度抖动 */
+.mj-exam .num {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  color: var(--color-primary);
 }
 
-.exam-taking-timer-warn {
-  color: var(--color-error);
-  animation: timer-pulse 1s ease-in-out infinite;
+.mj-exam .grow {
+  flex: 1;
+  min-width: 0;
 }
 
-@keyframes timer-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
-}
-
-.exam-taking-progress-bar {
-  height: 4px;
-  margin-bottom: 16px;
-  border-radius: 2px;
-  background: var(--color-border);
-  overflow: hidden;
-}
-
-.exam-taking-progress-fill {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
-  transition: width 0.4s var(--ease-out);
-}
-
-.exam-taking-body {
+.mj-exam .row {
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.exam-taking-nav {
-  flex: none;
-  width: 200px;
-  padding: 16px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-}
-
-.exam-taking-nav-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
   gap: 8px;
 }
 
-.exam-taking-nav-item {
-  height: 32px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.exam-taking-nav-item:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+.mj-exam .between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.exam-taking-nav-item.is-answered {
+.mj-exam .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.mj-exam .stack-sm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- 顶栏 ---------- */
+.mj-exam .exam-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mj-exam .exam-bar-in {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  min-height: 62px;
+  flex-wrap: wrap;
+}
+
+.mj-exam .side-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.mj-exam .side-link:hover {
+  background: var(--color-primary-light);
+  color: var(--color-text);
+}
+
+.mj-exam .brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--color-text);
+  color: var(--color-surface);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  flex: none;
+}
+
+.mj-exam .exam-name {
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.mj-exam .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.mj-exam .pill-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.mj-exam .pill-ok {
+  background: color-mix(in srgb, var(--color-success) 13%, var(--color-surface));
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 24%, var(--color-surface));
+}
+
+.mj-exam .pill-warn {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-warning) 62%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-warning) 30%, var(--color-surface));
+}
+
+.mj-exam .pill-neutral {
+  background: var(--color-primary-light);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+}
+
+.mj-exam .timer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 13px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.mj-exam .timer-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.mj-exam .timer.warn {
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+}
+
+.mj-exam .timer.warn .timer-num {
+  color: color-mix(in srgb, var(--color-warning) 62%, var(--color-text));
+}
+
+.mj-exam .who {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.mj-exam .who-txt {
+  min-width: 0;
+}
+
+.mj-exam .who-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+
+.mj-exam .who-role {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+.mj-exam .avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-border);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text);
+  flex: none;
+}
+
+/* ---------- 按钮（参考 .btn 体系） ---------- */
+.mj-exam .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  font-size: 13.5px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.mj-exam .btn:active {
+  transform: translateY(1px);
+}
+
+.mj-exam .btn-primary {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: #fff;
 }
 
-.exam-taking-nav-item.is-active {
+.mj-exam .btn-primary:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.mj-exam .btn-secondary {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.mj-exam .btn-secondary:hover {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
-  font-weight: 700;
+  color: var(--color-primary);
 }
 
-.exam-taking-nav-item.is-active.is-answered {
-  background: var(--color-primary-active);
+.mj-exam .btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
 }
 
-.exam-taking-nav-summary {
-  margin: 14px 0 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-divider);
+/* ---------- 主体 ---------- */
+.mj-exam .exam-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+  padding: 18px 20px 40px;
+  width: 100%;
+  max-width: 1400px;
+  margin-inline: auto;
+}
+
+.mj-exam .exam-side {
+  position: sticky;
+  top: 82px;
+}
+
+/* ---------- 切屏 banner ---------- */
+.mj-exam .banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid;
+  font-size: 13px;
+}
+
+.mj-exam .banner-warn {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 34%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-warning) 62%, var(--color-text));
+}
+
+.mj-exam .banner-danger {
+  background: color-mix(in srgb, var(--color-error) 12%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-error) 28%, var(--color-surface));
+  color: var(--color-error);
+}
+
+/* ---------- 题目卡 ---------- */
+.mj-exam .q-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.mj-exam .q-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mj-exam .q-no {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--color-text);
+}
+
+/* QuestionRenderer 在 .q-card 内只保留题干与作答区，卡片铬由 .q-card 提供 */
+.mj-exam .q-card .question-card {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.mj-exam .q-card .question-card:hover {
+  box-shadow: none;
+}
+
+/* 参考 .opt 体系（选项以 QuestionRenderer 渲染，此处保留同名样式供一致性） */
+.mj-exam .opt {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 13px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  text-align: left;
+  min-height: 44px;
+  width: 100%;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.mj-exam .opt:hover {
+  border-color: var(--color-primary);
+  background: var(--color-row-hover);
+}
+
+.mj-exam .opt-key {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--color-text-secondary);
-  text-align: center;
 }
 
-.exam-taking-main {
-  flex: 1;
-  min-width: 0;
+.mj-exam .opt.sel {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
-.exam-taking-main .page-card {
-  max-width: 760px;
+.mj-exam .opt.sel .opt-key {
+  background: var(--color-text);
+  border-color: var(--color-text);
+  color: var(--color-surface);
+  font-weight: 600;
 }
 
-.exam-taking-actions {
+/* ---------- 答题卡 ---------- */
+.mj-exam .panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.mj-exam .panel-head {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-top: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  min-height: 52px;
+}
+
+.mj-exam .title-sm {
+  font-size: 13.5px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.mj-exam .panel-body {
+  padding: 16px;
+}
+
+.mj-exam .sheet {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mj-exam .sheet button {
+  aspect-ratio: 1;
+  min-height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  padding: 0;
+  cursor: pointer;
+}
+
+.mj-exam .sheet button:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.mj-exam .sheet button.done {
+  background: var(--color-primary-light);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.mj-exam .sheet button.flag {
+  border-color: color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
+  color: color-mix(in srgb, var(--color-warning) 62%, var(--color-text));
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+}
+
+.mj-exam .sheet button.cur {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.mj-exam .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.mj-exam .legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+}
+
+.mj-exam .legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid var(--color-border);
+  display: block;
+}
+
+.mj-exam .legend i.done {
+  background: var(--color-primary-light);
+}
+
+.mj-exam .legend i.cur {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.mj-exam .legend i.flag {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 55%, var(--color-border));
+}
+
+.mj-exam .rule {
+  border-top: 1px solid var(--color-border);
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  margin: 0;
+}
+
+.mj-exam .exam-notice {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+}
+
+.mj-exam .exam-notice p {
+  margin: 0;
 }
 
 @media (max-width: 1024px) {
-  .exam-taking-body {
-    flex-direction: column;
+  .mj-exam .exam-main {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .exam-taking-nav {
-    width: 100%;
-    order: 2;
+  .mj-exam .exam-side {
+    position: static;
   }
 
-  .exam-taking-main {
-    order: 1;
-  }
-
-  .exam-taking-nav-grid {
-    grid-template-columns: repeat(10, 1fr);
+  .mj-exam .sheet {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 }
