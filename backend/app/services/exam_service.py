@@ -150,6 +150,20 @@ async def publish_exam(db: AsyncSession, exam_id: int):
     return exam
 
 
+async def close_exam(db: AsyncSession, exam_id: int):
+    """结束考试，状态流转为 finished（幂等，已结束时重复调用仍返回考试对象）。
+
+    :return: 结束后的考试对象；考试不存在时返回 None
+    """
+    exam = await get_exam(db, exam_id)
+    if not exam:
+        return None
+    exam.status = "finished"
+    await db.commit()
+    await db.refresh(exam)
+    return exam
+
+
 async def delete_exam(db: AsyncSession, exam_id: int):
     """删除考试。
 

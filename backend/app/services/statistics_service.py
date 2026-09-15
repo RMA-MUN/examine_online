@@ -4,12 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime
 from app.models.exam_record import ExamRecord
-from app.models.question import Question
 from app.models.exam import Exam
 from app.models.course import Course
 from app.models.user import User
 from app.models.answer import Answer
 from app.models.class_ import SchoolClass
+from app.models.exam_class import ExamClass
+from app.models.question import Question
 
 async def get_exam_statistics(db: AsyncSession, exam_id: int):
     """统计某场考试的整体成绩：人数、平均分、最高/最低分、及格率与分数分布。
@@ -30,11 +31,11 @@ async def get_exam_statistics(db: AsyncSession, exam_id: int):
     # 防止除零：无记录时平均分取 0（此处 records 非空，仍保留兜底）
     avg_score = sum(scores) / total_students if total_students > 0 else 0
     
-    # 获取及格分数
-    result = await db.execute(select(Question).where(Question.exam_id == exam_id))
-    questions = result.scalars().all()
-    total_score = sum(q.score for q in questions)
-    pass_score = total_score * 0.6  # 假设60%及格
+    # 及格线以 Exam.pass_score 为准（唯一行为变更：删 Σ*0.6 推导）
+    exam_result = await db.execute(select(Exam.pass_score).where(Exam.id == exam_id))
+    pass_score = exam_result.scalar_one_or_none()
+    if pass_score is None:
+        pass_score = 60
     
     # 及格判定使用 >=，恰好等于及格线也算及格
     pass_count = sum(1 for s in scores if s >= pass_score)
@@ -89,6 +90,170 @@ async def export_exam_scores(db: AsyncSession, exam_id: int):
         })
     
     return export_data
+
+async def _get_overview_extension(db: AsyncSession, course_ids: list[int] | None = None) -> dict:
+    """总览扩展 8 字段：纯聚合现有表（范围 seg 后端分页本次不做，前端仍读 mock 三档）。
+
+    - online：在考记录数（status=ongoing）；teacher 按名下课程过滤
+    - peak：今日开考数与 online 取大（无历史峰值表，用当日量近似）
+    - pending：待批改题目数（Answer.grading_source=pending）
+    - eta：pending/300 小时（约 300 份/小时吞吐）
+    - alerts：切屏超限记录数（switch_count > Exam.max_switch）
+    - running_exams：进行中/已发布考试（id/title/status/online/total/start_time/end_time/total_score/question_count/classes/progress，最多 5 场）
+    - grading_progress：按考试 done/total/percent（done=graded 记录数）
+    - feed：最近 4 条动态（level/title/meta）
+    """
+    now = datetime.now()
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    scoped = course_ids is not None
+
+    if not scoped:
+        online = (await db.execute(
+            select(func.count()).select_from(ExamRecord).where(ExamRecord.status == "ongoing")
+        )).scalar_one()
+        today_started = (await db.execute(
+            select(func.count()).select_from(ExamRecord).where(ExamRecord.start_time >= start_of_day)
+        )).scalar_one()
+        pending = (await db.execute(
+            select(func.count()).select_from(Answer).where(Answer.grading_source == "pending")
+        )).scalar_one()
+        alerts = (await db.execute(
+            select(func.count()).select_from(ExamRecord)
+            .join(Exam, Exam.id == ExamRecord.exam_id)
+            .where(ExamRecord.switch_count > Exam.max_switch)
+        )).scalar_one()
+    else:
+        if not course_ids:
+            online = 0
+            today_started = 0
+            pending = 0
+            alerts = 0
+        else:
+            online = (await db.execute(
+                select(func.count()).select_from(ExamRecord)
+                .join(Exam, Exam.id == ExamRecord.exam_id)
+                .where(ExamRecord.status == "ongoing", Exam.course_id.in_(course_ids))
+            )).scalar_one()
+            today_started = (await db.execute(
+                select(func.count()).select_from(ExamRecord)
+                .join(Exam, Exam.id == ExamRecord.exam_id)
+                .where(ExamRecord.start_time >= start_of_day, Exam.course_id.in_(course_ids))
+            )).scalar_one()
+            pending = (await db.execute(
+                select(func.count()).select_from(Answer)
+                .join(ExamRecord, ExamRecord.id == Answer.record_id)
+                .join(Exam, Exam.id == ExamRecord.exam_id)
+                .where(Answer.grading_source == "pending", Exam.course_id.in_(course_ids))
+            )).scalar_one()
+            alerts = (await db.execute(
+                select(func.count()).select_from(ExamRecord)
+                .join(Exam, Exam.id == ExamRecord.exam_id)
+                .where(ExamRecord.switch_count > Exam.max_switch, Exam.course_id.in_(course_ids))
+            )).scalar_one()
+    peak = max(int(online or 0), int(today_started or 0))
+    pending = int(pending or 0)
+    eta = round(pending / 300, 1) if pending else 0.0
+
+    exam_query = select(Exam).where(Exam.status.in_(["published", "ongoing"])).order_by(Exam.start_time.desc()).limit(5)
+    if scoped:
+        exam_query = select(Exam).where(
+            Exam.status.in_(["published", "ongoing"]),
+            Exam.course_id.in_(course_ids) if course_ids else False,
+        ).order_by(Exam.start_time.desc()).limit(5)
+    running_list = (await db.execute(exam_query)).scalars().all()
+    running_ids = [e.id for e in running_list]
+    per_exam_records: dict[int, list] = {eid: [] for eid in running_ids}
+    if running_ids:
+        rec_rows = (await db.execute(
+            select(ExamRecord).where(ExamRecord.exam_id.in_(running_ids))
+        )).scalars().all()
+        for r in rec_rows:
+            per_exam_records.setdefault(r.exam_id, []).append(r)
+    qcount = {}
+    class_names: dict[int, list] = {eid: [] for eid in running_ids}
+    if running_ids:
+        for eid, c in (await db.execute(
+            select(Question.exam_id, func.count()).select_from(Question)
+            .where(Question.exam_id.in_(running_ids)).group_by(Question.exam_id)
+        )).all():
+            qcount[eid] = c
+        for eid, name in (await db.execute(
+            select(ExamClass.exam_id, SchoolClass.name)
+            .join(SchoolClass, SchoolClass.id == ExamClass.class_id)
+            .where(ExamClass.exam_id.in_(running_ids))
+        )).all():
+            class_names.setdefault(eid, []).append(name)
+    running_exams = []
+    for e in running_list:
+        recs = per_exam_records.get(e.id, [])
+        total = len(recs)
+        finished = sum(1 for r in recs if r.status in ("submitted", "graded"))
+        running_exams.append(
+            {
+                "id": e.id,
+                "title": e.title,
+                "status": e.status,
+                "online": sum(1 for r in recs if r.status == "ongoing"),
+                "total": total,
+                "start_time": e.start_time,
+                "end_time": e.end_time,
+                "total_score": e.total_score,
+                "question_count": qcount.get(e.id, 0),
+                "classes": class_names.get(e.id, []),
+                "progress": round(finished / total * 100, 1) if total else 0.0,
+            }
+        )
+    grading_progress = []
+    for e in running_list:
+        recs = per_exam_records.get(e.id, [])
+        total = len(recs)
+        done = sum(1 for r in recs if r.status == "graded")
+        percent = round(done / total * 100, 1) if total else 0.0
+        grading_progress.append(
+            {"exam_id": e.id, "exam_title": e.title, "done": done, "total": total, "percent": percent}
+        )
+
+    feed_query = (
+        select(ExamRecord, Exam.title, User.name)
+        .join(Exam, Exam.id == ExamRecord.exam_id)
+        .join(User, User.id == ExamRecord.student_id)
+        .order_by(ExamRecord.start_time.desc())
+        .limit(4)
+    )
+    if scoped and course_ids:
+        feed_query = (
+            select(ExamRecord, Exam.title, User.name)
+            .join(Exam, Exam.id == ExamRecord.exam_id)
+            .join(User, User.id == ExamRecord.student_id)
+            .where(Exam.course_id.in_(course_ids))
+            .order_by(ExamRecord.start_time.desc())
+            .limit(4)
+        )
+    feed_rows = (await db.execute(feed_query)).all()
+    feed = []
+    for record, exam_title, student_name in feed_rows:
+        if (record.switch_count or 0) > 3:
+            feed.append({"level": "danger", "title": f"考生 {student_name} 切屏 {record.switch_count} 次", "meta": f"{exam_title} · {record.start_time}"})
+        elif record.status == "graded":
+            feed.append({"level": "ok", "title": f"{exam_title} · {student_name} 已阅卷", "meta": f"得分 {record.score}"})
+        elif record.status == "submitted":
+            feed.append({"level": "info", "title": f"{exam_title} · {student_name} 已交卷", "meta": f"{record.submit_time or record.start_time}"})
+        else:
+            feed.append({"level": "warn", "title": f"{exam_title} · {student_name} 正在考试", "meta": f"切屏 {record.switch_count or 0} 次"})
+    if scoped and not course_ids:
+        feed = []
+
+    return {
+        "online": int(online or 0),
+        "peak": peak,
+        "pending": pending,
+        "eta": eta,
+        "alerts": int(alerts or 0),
+        "running_exams": running_exams,
+        "grading_progress": grading_progress,
+        "feed": feed,
+    }
+
 
 async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
     """按用户角色返回仪表盘统计数据：学生/教师/管理员各一套指标。"""
@@ -164,6 +329,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
                 "submit_time": r.submit_time,
             })
 
+        ext = await _get_overview_extension(db)
         return {
             "role": user.role,
             "stats": {
@@ -174,6 +340,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
             },
             "upcoming_exams": upcoming,
             "recent_records": recent,
+            **ext,
         }
 
     if user.role == "teacher":
@@ -240,6 +407,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
             for e in sorted(exams, key=lambda x: x.start_time, reverse=True)[:5]
         ]
 
+        ext = await _get_overview_extension(db, course_ids)
         return {
             "role": user.role,
             "stats": {
@@ -250,6 +418,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
             },
             "pending_grading": pending_grading,
             "recent_exams": recent_exams,
+            **ext,
         }
 
     # admin
@@ -416,6 +585,7 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
         {"class_name": name, "count": count} for name, count in class_rows
     ]
 
+    ext = await _get_overview_extension(db)
     return {
         "role": user.role,
         "stats": {
@@ -437,4 +607,5 @@ async def get_dashboard_data(db: AsyncSession, user: User) -> dict:
         "pending_grading_by_exam": pending_grading_by_exam,
         "switch_counts_by_exam": switch_counts_by_exam,
         "class_student_distribution": class_student_distribution,
+        **ext,
     }

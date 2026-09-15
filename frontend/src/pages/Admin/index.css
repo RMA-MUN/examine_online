@@ -1,0 +1,357 @@
+/* 系统管理 Tabs（明鉴风）：作用域 .mj-admin */
+.mj-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mj-admin .title-lg {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.018em;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.mj-admin .title-sm {
+  font-size: 13.5px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.mj-admin .page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.mj-admin .page-sub {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 4px 0 0;
+}
+
+.mj-admin .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mj-admin .grow {
+  flex: 1;
+}
+
+.mj-admin .meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+}
+
+.mj-admin .num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.mj-admin .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mj-admin .between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mj-admin .stack,
+.mj-admin .stack-sm {
+  display: flex;
+  flex-direction: column;
+}
+
+.mj-admin .link {
+  color: var(--color-primary);
+}
+
+.mj-admin .panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.mj-admin .panel.inner {
+  box-shadow: none;
+}
+
+.mj-admin .panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  min-height: 52px;
+}
+
+.mj-admin .panel-body {
+  padding: 16px;
+}
+
+.mj-admin .tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mj-admin .tabs button {
+  border: 0;
+  background: transparent;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.mj-admin .tabs button.on {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.mj-admin .ds-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+
+.mj-admin .ds-table th,
+.mj-admin .ds-table td {
+  padding: 11px 16px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mj-admin .ds-table th {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-sunken);
+}
+
+.mj-admin .cell-strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.mj-admin .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+}
+
+.mj-admin .pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.mj-admin .pill-ok {
+  background: rgba(46, 158, 107, 0.12);
+  color: #2e9e6b;
+}
+
+.mj-admin .pill-warn {
+  background: rgba(225, 112, 31, 0.12);
+  color: #e1701f;
+}
+
+.mj-admin .pill-info {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.mj-admin .pill-neutral {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+}
+
+.mj-admin .matrix {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+
+.mj-admin .matrix th,
+.mj-admin .matrix td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.mj-admin .matrix th:first-child,
+.mj-admin .matrix td:first-child {
+  text-align: left;
+}
+
+.mj-admin .matrix th {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-sunken);
+}
+
+.mj-admin .matrix .cat {
+  font-weight: 600;
+  background: var(--color-surface-sunken);
+  text-align: left;
+}
+
+.mj-admin .cols-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.mj-admin .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.mj-admin .input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.mj-admin .sw {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+  cursor: pointer;
+}
+
+.mj-admin .sw::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: left 0.15s ease;
+}
+
+.mj-admin .sw[aria-checked='true'] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.mj-admin .sw[aria-checked='true']::after {
+  left: 18px;
+}
+
+.mj-admin .feed {
+  display: flex;
+  flex-direction: column;
+}
+
+.mj-admin .feed-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mj-admin .feed-item:last-child {
+  border-bottom: 0;
+}
+
+.mj-admin .feed-ico {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mj-admin .ico-danger {
+  background: rgba(200, 65, 47, 0.12);
+  color: #c8412f;
+}
+
+.mj-admin .ico-warn {
+  background: rgba(225, 112, 31, 0.12);
+  color: #e1701f;
+}
+
+.mj-admin .ico-info {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.mj-admin .ico-ok {
+  background: rgba(46, 158, 107, 0.12);
+  color: #2e9e6b;
+}
+
+.mj-admin .feed-t {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--color-text);
+}
+
+.mj-admin .feed-m {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  margin-top: 3px;
+}
+
+.mj-admin .banner-info {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-border);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+@media (max-width: 900px) {
+  .mj-admin .cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

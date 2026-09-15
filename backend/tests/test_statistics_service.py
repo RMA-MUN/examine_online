@@ -65,6 +65,23 @@ def build_responses():
         RowResult([(1, "期中考试", 1)]),           # 8. 各考试待批改量
         RowResult([(1, "期中考试", 3)]),           # 9. 各考试切屏次数
         RowResult([("计科2401班", 2), ("未分配班级", 1)]),  # 10. 班级学生分布
+        ScalarResult(2),                           # 11. 总览扩展 online
+        ScalarResult(3),                           # 12. 总览扩展 today（peak 取大=3）
+        ScalarResult(150),                         # 13. 总览扩展 pending（eta=0.5）
+        ScalarResult(1),                           # 14. 总览扩展 alerts
+        ScalarResult([SimpleNamespace(id=1, title="期中考试", status="published", start_time="2026-01-02", end_time="2026-01-02", total_score=100)]),  # 15. running 考试
+        ScalarResult([                             # 16. running 考试记录
+            SimpleNamespace(exam_id=1, status="ongoing"),
+            SimpleNamespace(exam_id=1, status="graded"),
+        ]),
+        RowResult([(1, 20)]),                      # 17. running 考试题数
+        RowResult([(1, "计科2401班")]),             # 18. running 考试班级
+        RowResult([(                               # 17. feed 最近动态
+            SimpleNamespace(switch_count=1, status="graded", score=80,
+                            start_time="2026-01-02", submit_time="2026-01-02"),
+            "期中考试",
+            "张三",
+        )]),
     ]
 
 
@@ -100,6 +117,25 @@ async def test_admin_dashboard_aggregates_all_chart_datasets():
         {"class_name": "计科2401班", "count": 2},
         {"class_name": "未分配班级", "count": 1},
     ]
+    # Task 8 总览扩展 8 字段（只追加，不改现有结构）
+    assert data["online"] == 2
+    assert data["peak"] == 3
+    assert data["pending"] == 150
+    assert data["eta"] == 0.5
+    assert data["alerts"] == 1
+    assert data["running_exams"] == [
+        {
+            "id": 1, "title": "期中考试", "status": "published", "online": 1, "total": 2,
+            "start_time": "2026-01-02", "end_time": "2026-01-02", "total_score": 100,
+            "question_count": 20, "classes": ["计科2401班"], "progress": 50.0,
+        }
+    ]
+    assert data["grading_progress"] == [
+        {"exam_id": 1, "exam_title": "期中考试", "done": 1, "total": 2, "percent": 50.0}
+    ]
+    assert data["feed"] == [
+        {"level": "ok", "title": "期中考试 · 张三 已阅卷", "meta": "得分 80"}
+    ]
 
 
 @pytest.mark.asyncio
@@ -112,6 +148,15 @@ async def test_admin_dashboard_handles_empty_exam_data():
     responses[6] = RowResult([])      # 无参与人数
     responses[7] = RowResult([])      # 无待批改
     responses[8] = RowResult([])      # 无切屏
+    responses[10] = ScalarResult(0)   # online 空
+    responses[11] = ScalarResult(0)   # today 空
+    responses[12] = ScalarResult(0)   # pending 空
+    responses[13] = ScalarResult(0)   # alerts 空
+    responses[14] = ScalarResult([])  # running 空
+    responses[15] = ScalarResult([])  # 记录空
+    responses[16] = RowResult([])     # 题数空
+    responses[17] = RowResult([])     # 班级空
+    responses[18] = RowResult([])     # feed 空
     db = FakeSession(responses)
     data = await get_dashboard_data(db, make_admin_user())
 
@@ -128,3 +173,11 @@ async def test_admin_dashboard_handles_empty_exam_data():
     assert data["exam_participation"] == []
     assert data["pending_grading_by_exam"] == []
     assert data["switch_counts_by_exam"] == []
+    assert data["online"] == 0
+    assert data["peak"] == 0
+    assert data["pending"] == 0
+    assert data["eta"] == 0.0
+    assert data["alerts"] == 0
+    assert data["running_exams"] == []
+    assert data["grading_progress"] == []
+    assert data["feed"] == []

@@ -36,6 +36,18 @@ class QuestionBase(BaseModel):
     sort_order: int = 0  # 题目在试卷中的排序序号
     analysis: Optional[str] = None
     grading_rubric: Optional[List[RubricItem]] = None  # 评分要点列表（仅简答题可配置）
+    course_id: Optional[int] = None  # 题库所属学科/课程（考试题可空）
+    is_bank: bool = False  # 是否为题库题
+    tags: Optional[List[str]] = None  # 知识点标签
+    difficulty: Optional[str] = None  # 难度：easy=易, medium=中, hard=难
+    source_question_id: Optional[int] = None  # 从题库复制时回指的题库题ID
+
+    @field_validator("difficulty")
+    @classmethod
+    def validate_difficulty(cls, value: Optional[str]):
+        if value is not None and value not in ("easy", "medium", "hard"):
+            raise ValueError("难度仅支持 easy/medium/hard")
+        return value
 
     @model_validator(mode="after")
     def validate_grading_rubric(self):
@@ -64,11 +76,22 @@ class QuestionUpdate(BaseModel):
     sort_order: Optional[int] = None
     analysis: Optional[str] = None
     grading_rubric: Optional[List[RubricItem]] = None
+    course_id: Optional[int] = None
+    tags: Optional[List[str]] = None
+    difficulty: Optional[str] = None
+
+class BankQuestionCreate(QuestionBase):
+    """新建题库题请求体（复用 QuestionBase 校验，exam_id 固定为 null，is_bank 固定为 true）。"""
+    pass
+
+class FromBankRequest(BaseModel):
+    """从题库组卷请求体：待复制的题库题 ID 列表。"""
+    bank_ids: List[int]
 
 class QuestionResponse(QuestionBase):
     """题目详情响应（继承 QuestionBase，含 id、所属考试等系统字段）。"""
     id: int
-    exam_id: int  # 所属考试 ID
+    exam_id: Optional[int] = None  # 所属考试 ID（题库题为 null）
     created_at: datetime
 
     @field_validator("options", mode="before")

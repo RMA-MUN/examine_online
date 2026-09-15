@@ -7,6 +7,10 @@
  * - ordinal（有序色阶）：单色相、明度单调、相邻明度差 ≥ 0.06、浅端对比度 ≥ 2:1。
  *
  * 修改任一色值后必须重新运行校验，勿直接目测。
+ *
+ * 注意（明鉴重构 Task 1）：categorical[0] 已由蓝系换为明鉴绿（亮色 #2E7D4F /
+ * 暗色 #5FB87E），dataviz 四项校验尚未重跑——仓库内无校验脚本，
+ * 后继任务补上脚本后需重验 categorical 全配对。
  */
 
 export type ThemeMode = 'light' | 'dark';
@@ -35,7 +39,7 @@ export interface ChartTheme {
 }
 
 const LIGHT: ChartTheme = {
-  categorical: ['#3A6FA5', '#E1701F', '#2E9E6B'],
+  categorical: ['#2E7D4F', '#E1701F', '#2E9E6B'],
   ordinal4: ['#95B4D1', '#6C96BF', '#4879A6', '#2F5F8B'],
   ordinal5: ['#95B4D1', '#7099C1', '#4B7EAB', '#356891', '#234E73'],
   status: {
@@ -54,7 +58,7 @@ const LIGHT: ChartTheme = {
 };
 
 const DARK: ChartTheme = {
-  categorical: ['#4A83BE', '#E1701F', '#2E9E6B'],
+  categorical: ['#5FB87E', '#E1701F', '#2E9E6B'],
   ordinal4: ['#33648F', '#4A83BE', '#6B9ECF', '#95BEE0'],
   ordinal5: ['#2C5A85', '#3B74A6', '#4F8EC0', '#6BA6D3', '#8CBEE2'],
   status: {

@@ -5,25 +5,34 @@ from sqlalchemy import select
 from app.redis_client import redis_client
 from app.models.exam import Exam
 from app.models.exam_record import ExamRecord
+from app.models.monitor_event import MonitorEvent
+
+async def incr_switch_count(exam_id: int, student_id: int, duration_minutes: int) -> int:
+    """切屏计数的唯一写入入口：Redis INCR + 首写同步 TTL，返回最新计数值。
+
+    record_switch 与 POST /api/exams/{id}/events 的 switch 上报共用此计数源，
+    消除 DB +1 与 Redis 回写交错时的丢增量。
+    """
+    key = f"exam:switch:{exam_id}:{student_id}"
+    count = await redis_client.incr(key)
+    # 计数键与考试时长同步过期，避免长期占用内存；ttl 为 -1 表示键无过期时间
+    ttl = await redis_client.ttl(key)
+    if ttl == -1:
+        await redis_client.expire(key, duration_minutes * 60)
+    return count
 
 async def record_switch(db: AsyncSession, exam_id: int, student_id: int):
     """记录一次切屏行为并同步数据库计数。
 
     :return: 元组 (切屏信息字典或 None, 错误信息或 None)；切屏信息含当前次数/上限/是否应强制交卷
     """
-    # 增加切屏次数
-    count = await redis_client.incr(f"exam:switch:{exam_id}:{student_id}")
-
     # 获取考试信息
     exam = await db.get(Exam, exam_id)
     if not exam:
         return None, "考试不存在"
 
-    # 设置过期时间（如果还没设置）
-    # 计数键与考试时长同步过期，避免长期占用内存；ttl 为 -1 表示键无过期时间
-    ttl = await redis_client.ttl(f"exam:switch:{exam_id}:{student_id}")
-    if ttl == -1:
-        await redis_client.expire(f"exam:switch:{exam_id}:{student_id}", exam.duration * 60)
+    # 增加切屏次数（唯一计数源，与事件上报共用）
+    count = await incr_switch_count(exam_id, student_id, exam.duration)
 
     # 更新数据库中的切屏次数
     result = await db.execute(
@@ -36,6 +45,14 @@ async def record_switch(db: AsyncSession, exam_id: int, student_id: int):
     record = result.scalar_one_or_none()
     if record:
         record.switch_count = count
+        # 同步写入一条切屏监控事件，保持计数与事件流一致（旧的计数行为不变）
+        db.add(MonitorEvent(
+            exam_id=exam_id,
+            record_id=record.id,
+            student_id=student_id,
+            event_type="switch",
+            detail=None,
+        ))
         await db.commit()
 
     # 检查是否超过最大次数

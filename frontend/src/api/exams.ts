@@ -69,3 +69,41 @@ export const importQuestionsFile = (examId: number, file: File): Promise<ApiResp
     headers: { 'Content-Type': 'multipart/form-data' }
   }) as Promise<ApiResponse<ImportResult> | ImportErrorResponse>;
 };
+
+export const createBankQuestion = (data: QuestionInput): Promise<ApiResponse<Question>> =>
+  axios.post('/api/bank/questions', data) as Promise<ApiResponse<Question>>;
+
+export const createFromBank = (examId: number, question_ids: number[]) =>
+  axios.post(`/api/exams/${examId}/questions/from-bank`, { bank_ids: question_ids });
+
+export const importQuestionsJson = (examId: number, items: unknown[]) =>
+  axios.post(`/api/exams/${examId}/questions/import`, { questions: items });
+
+export const reportEvent = (examId: number, event_type: string, detail?: Record<string, unknown>) =>
+  axios.post(`/api/exams/${examId}/events`, { event_type, detail: detail ?? null });
+
+export const importBankFile = (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return axios.post('/api/bank/questions/import-file', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+
+export const generatePaperFromBasket = (examId: number, bankIds: number[]) =>
+  axios.post(`/api/exams/${examId}/questions/from-bank`, { bank_ids: bankIds });
+
+export interface AnnouncementItem {
+  id: number;
+  exam_id: number;
+  record_id: number;
+  event_type: string;
+  detail: { message?: string } | null;
+  created_at: string;
+}
+
+export const postAnnouncement = (examId: number, message: string) =>
+  axios.post(`/api/exams/${examId}/announcements`, { message });
+
+export const getAnnouncements = (examId: number): Promise<ApiResponse<AnnouncementItem[]>> =>
+  axios.get(`/api/exams/${examId}/announcements`) as Promise<ApiResponse<AnnouncementItem[]>>;

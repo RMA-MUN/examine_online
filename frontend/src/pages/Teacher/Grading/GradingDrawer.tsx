@@ -14,6 +14,8 @@ import type { ExamRecord } from '../../../types/record';
 import type { Answer, GradeRequest } from '../../../types/answer';
 import type { QuestionType } from '../../../types/question';
 
+/** @deprecated 已被 Workspace 内联替代，仅保留作 AI 回归锚点，勿再挂载；改判分语义需双改或抽 hook */
+
 interface GradingDrawerProps {
   record: ExamRecord | null;
   open: boolean;

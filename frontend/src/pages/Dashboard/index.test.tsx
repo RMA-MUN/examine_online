@@ -222,4 +222,45 @@ describe('Dashboard', () => {
     expect(await screen.findByText('获取导出选项失败')).toBeInTheDocument();
     error.mockRestore();
   });
+
+  it('渲染4张KPI与6个功能模组', async () => {
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(await screen.findByTestId('kpi-running')).toBeInTheDocument();
+    expect(screen.getAllByTestId(/module-/).length).toBe(6);
+  });
+
+  it('总览表格渲染接口真实数据而非演示数据', async () => {
+    renderDashboard({
+      ...teacherData,
+      online: 12,
+      peak: 20,
+      pending: 7,
+      eta: 0.5,
+      alerts: 1,
+      running_exams: [
+        {
+          id: 9, title: '真实考试', status: 'ongoing', online: 5, total: 10,
+          start_time: '2026-09-15 09:00:00', end_time: '2026-09-15 11:00:00',
+          total_score: 100, question_count: 20, classes: ['计科2401班'], progress: 50,
+        },
+      ],
+      grading_progress: [{ exam_id: 9, exam_title: '真实考试', done: 3, total: 10, percent: 30 }],
+      feed: [{ level: 'warn', title: '真实动态', meta: '真实考试 · 刚才' }],
+    });
+
+    expect((await screen.findAllByText('真实考试')).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('20 题 · 100 分')).toBeInTheDocument();
+    expect(screen.getByText('计科2401班')).toBeInTheDocument();
+    expect(screen.getByText('真实动态')).toBeInTheDocument();
+    expect(screen.queryByText('《数据结构与算法》期中考试')).not.toBeInTheDocument();
+    expect(screen.queryByText(/12,480/)).not.toBeInTheDocument();
+  });
+
+  it('总览无数据时展示空态而非演示数据', async () => {
+    renderDashboard({ ...teacherData, running_exams: [], grading_progress: [], feed: [] });
+
+    expect(await screen.findByText('暂无进行中的考试')).toBeInTheDocument();
+    expect(screen.getByText('暂无阅卷进度')).toBeInTheDocument();
+    expect(screen.getByText('暂无动态')).toBeInTheDocument();
+  });
 });

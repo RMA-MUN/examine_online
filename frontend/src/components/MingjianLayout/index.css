@@ -1,0 +1,163 @@
+.mj-layout {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* 浅色侧边栏：消费 Task 1 令牌 --mj-sider-bg，覆盖旧深色菜单底 */
+.mj-sider {
+  background: var(--mj-sider-bg) !important;
+  border-right: 1px solid var(--mj-border);
+  overflow: hidden;
+}
+
+.mj-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.mj-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 64px;
+  padding: 0 20px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--mj-border);
+}
+
+.mj-brand-mark {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--mj-primary);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.mj-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  overflow: hidden;
+}
+
+.mj-brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.mj-brand-sub {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.mj-sider .ant-menu {
+  flex: 1;
+  border-inline-end: none !important;
+  background: transparent;
+  padding: 8px 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* active 项：柔和底 + 左侧 2px accent 竖条 */
+.mj-sider .ant-menu-item {
+  position: relative;
+}
+
+.mj-sider .ant-menu-light .ant-menu-item-selected {
+  background: rgba(46, 125, 79, 0.1);
+  color: var(--mj-primary);
+  font-weight: 600;
+}
+
+:root[data-theme='dark'] .mj-sider .ant-menu-dark .ant-menu-item-selected {
+  background: rgba(95, 184, 126, 0.16);
+}
+
+.mj-sider .ant-menu-item-selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 18px;
+  border-radius: 0 2px 2px 0;
+  background: var(--mj-primary);
+}
+
+.mj-side-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--mj-border);
+}
+
+.mj-side-foot-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.mj-side-foot-role {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.mj-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mj-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mj-theme-toggle {
+  color: var(--color-text-secondary);
+  font-size: 16px;
+}
+
+.mj-user {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-control);
+}
+
+.mj-content {
+  height: calc(100dvh - 64px - 48px);
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.mj-content-inner {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.mj-footer {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border);
+  padding: 0;
+}

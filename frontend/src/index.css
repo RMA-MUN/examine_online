@@ -10,10 +10,10 @@ body,
 }
 
 :root {
-  --color-primary: #3D5A80;
-  --color-primary-hover: #4A6B94;
-  --color-primary-active: #2C4460;
-  --color-primary-light: #E8EDF3;
+  --color-primary: #2E7D4F;
+  --color-primary-hover: #245F3D;
+  --color-primary-active: #1B4A2F;
+  --color-primary-light: #E7F2EB;
   --color-bg: #F0F2F5;
   --color-surface: #FFFFFF;
   --color-surface-sunken: #F7F9FB;
@@ -24,12 +24,12 @@ body,
   --color-text-disabled: #B0B8C2;
   --color-sidebar-bg: #1A2332;
   --color-sidebar-hover: #2A3A4E;
-  --color-sidebar-active: #3D5A80;
+  --color-sidebar-active: #2E7D4F;
   --color-sidebar-text: #8B9BB4;
   --color-success: #52C41A;
   --color-warning: #FAAD14;
   --color-error: #FF4D4F;
-  --color-info: #3D5A80;
+  --color-info: #2E7D4F;
   --color-row-hover: #F5F8FC;
   --color-scroll-thumb: rgba(139, 155, 180, 0.45);
   --color-scroll-thumb-hover: rgba(107, 123, 141, 0.7);
@@ -46,6 +46,13 @@ body,
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC',
     'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+
+  /* ---------- 明鉴（Mingjian）主题令牌：后继任务经 ConfigProvider/图表消费 ---------- */
+  --mj-primary: #2E7D4F;
+  --mj-sider-bg: #FFFFFF;
+  --mj-content-bg: #F4F6F4;
+  --mj-border: #E2E8E2;
 }
 
 /*
@@ -55,10 +62,10 @@ body,
  * 阴影在深色背景上几乎不可见，改由边框承担层次。
  */
 :root[data-theme='dark'] {
-  --color-primary: #6B9ECF;
-  --color-primary-hover: #82B0DC;
-  --color-primary-active: #4A83BE;
-  --color-primary-light: #24344A;
+  --color-primary: #5FB87E;
+  --color-primary-hover: #4C9A67;
+  --color-primary-active: #35744C;
+  --color-primary-light: #223A2D;
   --color-bg: #16202C;
   --color-surface: #1E2A3A;
   --color-surface-sunken: #24313F;
@@ -69,12 +76,12 @@ body,
   --color-text-disabled: #6B7B8D;
   --color-sidebar-bg: #131C26;
   --color-sidebar-hover: #24344A;
-  --color-sidebar-active: #3A6FA5;
+  --color-sidebar-active: #2E7D4F;
   --color-sidebar-text: #94A6BC;
   --color-success: #4CAF6D;
   --color-warning: #E0A030;
   --color-error: #E06A58;
-  --color-info: #6B9ECF;
+  --color-info: #5FB87E;
   --color-row-hover: #253346;
   --color-scroll-thumb: rgba(148, 166, 188, 0.32);
   --color-scroll-thumb-hover: rgba(159, 176, 196, 0.55);
@@ -83,6 +90,11 @@ body,
   --shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-pop: 0 6px 18px rgba(0, 0, 0, 0.4);
   --shadow-modal: 0 14px 44px rgba(0, 0, 0, 0.52);
+
+  --mj-primary: #5FB87E;
+  --mj-sider-bg: #141F19;
+  --mj-content-bg: #101915;
+  --mj-border: #2E4238;
 }
 
 * {
@@ -92,6 +104,7 @@ body,
 body {
   margin: 0;
   font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
   background: var(--color-bg);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
@@ -100,7 +113,7 @@ body {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 
 /* ---------- 滚动条 ---------- */
@@ -181,7 +194,7 @@ code {
   transition: all 0.2s ease;
 }
 .ant-menu-item-selected {
-  box-shadow: 0 2px 8px rgba(61, 90, 128, 0.35);
+  box-shadow: 0 2px 8px rgba(46, 125, 79, 0.35);
 }
 
 /* 表格分页 hover */
