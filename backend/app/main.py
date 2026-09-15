@@ -43,10 +43,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="在线考试系统", version="1.0.0", lifespan=lifespan)
 
-# 仅允许前端开发服务器跨域访问；使用凭证模式时来源必须显式列出，不能写成 "*"
+# 允许的前端来源可经 CORS_ORIGINS 环境变量配置（逗号分隔），默认仅本地开发服务器；使用凭证模式时来源必须显式列出，不能写成 "*"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
