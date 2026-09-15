@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { App, Button, Modal } from 'antd';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { getExam, getPaper, saveAnswers, submitExam, recordSwitch, getSwitchStatus, reportEvent, getAnnouncements } from '../../../api/exams';
@@ -54,8 +54,9 @@ const ExamTaking = () => {
     () => (typeof navigator !== 'undefined' ? navigator.onLine : true)
   );
   // 全屏公告：轮询 GET /api/exams/{id}/announcements，未见过的公告全屏 Modal 展示
+  // 已见 id 用 ref 去重（updater 保持纯函数，避免 StrictMode 双调重复弹公告）
   const [notice, setNotice] = useState<{ id: number; message: string } | null>(null);
-  const [seenNoticeIds, setSeenNoticeIds] = useState<number[]>([]);
+  const seenNoticeIds = useRef<Set<number>>(new Set());
   const [timeLeft, setTimeLeft] = useState(() => {
     const duration = (location.state as { duration?: number } | null)?.duration;
     return duration ? duration * 60 : 0;
@@ -118,18 +119,15 @@ const ExamTaking = () => {
         const res = await getAnnouncements(Number(examId));
         if (cancelled) return;
         const items = res?.data ?? [];
-        setSeenNoticeIds((prev) => {
-          const fresh = items.find(
-            (a) => a.event_type === 'announcement' && !prev.includes(a.id)
-          );
-          if (fresh) {
-            const text =
-              typeof fresh.detail?.message === 'string' ? fresh.detail.message : '请注意考试安排';
-            setNotice({ id: fresh.id, message: text });
-            return [...prev, fresh.id];
-          }
-          return prev;
-        });
+        const fresh = items.find(
+          (a) => a.event_type === 'announcement' && !seenNoticeIds.current.has(a.id)
+        );
+        if (fresh) {
+          seenNoticeIds.current.add(fresh.id);
+          const text =
+            typeof fresh.detail?.message === 'string' ? fresh.detail.message : '请注意考试安排';
+          setNotice({ id: fresh.id, message: text });
+        }
       } catch {
         /* 公告不可用时静默，作答不受影响 */
       }

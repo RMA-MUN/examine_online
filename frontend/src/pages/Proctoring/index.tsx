@@ -227,8 +227,16 @@ const Proctoring = () => {
     }
     setAnnounceSending(true);
     try {
-      await axios.post(`/api/exams/${examId}/announcements`, { message: text });
-      message.success('公告已下发，考生端将全屏展示');
+      const res = (await axios.post(`/api/exams/${examId}/announcements`, {
+        message: text,
+      })) as unknown as ApiResponse<{ exam_id: number; count: number }>;
+      // 空考试 count==0 时后端 201 附注：透出 warning，避免教师误以为下发成功
+      const count = res?.data?.count ?? 1;
+      if (count === 0) {
+        message.warning(res?.message || '考试暂无考生记录，公告未下发给任何人');
+      } else {
+        message.success(`公告已下发（${count} 人），考生端将全屏展示`);
+      }
       setAnnounceOpen(false);
       setAnnounceText('');
     } catch {

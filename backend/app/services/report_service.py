@@ -34,6 +34,23 @@ def normalize_report_sections(sections: list[str] | None) -> list[str]:
     return used or list(REPORT_SECTIONS)
 
 
+async def _fetch_all_student_scores(db: AsyncSession, exam_id: int) -> dict:
+    """分页拉全学生成绩明细（排名由 get_exam_student_scores 全局计算，跨页拼接保持不变）。"""
+    page, page_size = 1, 500
+    items: list[dict] = []
+    total = 0
+    while True:
+        chunk = await get_exam_student_scores(db, exam_id, page=page, page_size=page_size)
+        total = chunk["total"]
+        if not chunk["items"]:
+            break
+        items.extend(chunk["items"])
+        if len(items) >= total:
+            break
+        page += 1
+    return {"total": total, "items": items}
+
+
 async def collect_report_data(
     db: AsyncSession, exam_id: int, sections: list[str] | None
 ) -> tuple[dict, list[str]]:
@@ -41,7 +58,7 @@ async def collect_report_data(
     used = normalize_report_sections(sections)
     data: dict = {"exam_id": exam_id}
     if "scores" in used:
-        students = await get_exam_student_scores(db, exam_id, page=1, page_size=1000)
+        students = await _fetch_all_student_scores(db, exam_id)
         data["scores"] = {
             "summary": await get_exam_statistics(db, exam_id),
             "bins": await get_score_bins(db, exam_id),

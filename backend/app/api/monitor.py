@@ -173,6 +173,14 @@ async def create_announcement(
     records = (
         (await db.execute(select(ExamRecord).where(ExamRecord.exam_id == exam_id))).scalars().all()
     )
+    # 空考试（尚无考生记录）：保持 201 幂等语义，但 message 注明无人接收，
+    # 避免教师误以为下发成功；前端据 count==0 透出 warning（分支由 test_announcement_empty_exam 锁定）。
+    if not records:
+        return {
+            "code": 201,
+            "message": "考试暂无考生记录，公告未下发给任何人",
+            "data": {"exam_id": exam_id, "count": 0},
+        }
     for record in records:
         db.add(
             MonitorEvent(

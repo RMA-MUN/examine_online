@@ -178,3 +178,57 @@ async def test_announcement_teacher_post_student_poll(client, db: AsyncSession):
         headers=_auth_header(s1),
     )
     assert denied.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_announcement_empty_exam_returns_zero_count_with_note(client, db: AsyncSession):
+    """空考试（无考生记录）下发公告：仍 201，但 count==0 且 message 注明无人接收。"""
+    from datetime import datetime, timedelta
+
+    teacher = User(username="rep_empty_t", password_hash="x", role="teacher", name="T")
+    db.add(teacher)
+    await db.flush()
+    course = Course(name="空考试科目", teacher_id=teacher.id)
+    db.add(course)
+    await db.flush()
+    await assign_subject_to_teacher(db, teacher.id, course.id)
+    exam = Exam(
+        course_id=course.id,
+        title="无人考试",
+        start_time=datetime.now() - timedelta(minutes=10),
+        end_time=datetime.now() + timedelta(minutes=60),
+        duration=60,
+        total_score=100,
+        pass_score=60,
+        status="ongoing",
+    )
+    db.add(exam)
+    await db.commit()
+    await db.refresh(exam)
+
+    r = await client.post(
+        f"/api/exams/{exam.id}/announcements",
+        json={"message": "有人吗"},
+        headers=_auth_header(teacher),
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["data"]["count"] == 0
+    assert "无考生记录" in body["message"]
+
+
+@pytest.mark.asyncio
+async def test_report_students_not_truncated(db: AsyncSession, monkeypatch):
+    """报告学生明细不被单页截断：桩掉分页（每页 2 条、共 5 条），断言分页拉全。"""
+    import app.services.report_service as report_service
+
+    async def fake_page(db, exam_id, page=1, page_size=10, class_id=None, keyword=None):
+        all_rows = [{"rank": i + 1, "score": 60 + i} for i in range(5)]
+        start = (page - 1) * 2
+        return {"total": 5, "items": all_rows[start : start + 2]}
+
+    monkeypatch.setattr(report_service, "get_exam_student_scores", fake_page)
+
+    out = await report_service._fetch_all_student_scores(db, 999)
+    assert out["total"] == 5
+    assert [r["rank"] for r in out["items"]] == [1, 2, 3, 4, 5]
