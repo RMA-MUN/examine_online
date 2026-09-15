@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { App, Button, Modal, Select } from 'antd';
 import { getExams } from '../../api/exams';
-import { exportScores, getExamQuestionStats, getExamStudentScores } from '../../api/statistics';
+import { buildExamReport, exportScores, getExamQuestionStats, getExamStudentScores } from '../../api/statistics';
 import { downloadDashboardFile } from '../../utils/dashboardExport';
 import { ANALYTICS_EXAMS, MOCK_ANALYTICS, type AnalyticsExamKey } from '../../mocks/analytics';
 import './index.css';
@@ -37,6 +37,7 @@ const Analytics = () => {
   const [reportOpen, setReportOpen] = useState(false);
   const [checked, setChecked] = useState<boolean[]>([true, true, true, false]);
   const [exporting, setExporting] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
 
   // TODO(Task4): 图表仍渲染 MOCK_ANALYTICS 演示数据；examId 对齐 + questions/students 连通性已验证，
   // 全量图形切真实聚合（知识点/班级/分数段/D值）待 Task 4 落地。
@@ -116,6 +117,35 @@ const Analytics = () => {
       message.error('导出成绩单失败');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleReportOk = async () => {
+    if (examId == null) {
+      // 后端不可用（mock 考试下拉）时保持本地演示行为
+      setReportOpen(false);
+      message.success('已开始生成报告（演示）');
+      return;
+    }
+    const sections: string[] = [];
+    if (checked[0]) sections.push('scores');
+    if (checked[1]) sections.push('quality');
+    if (checked[2]) sections.push('knowledge');
+    if (sections.length === 0) {
+      message.warning('请至少勾选一项报告内容（PDF 证明暂不支持导出）');
+      return;
+    }
+    setReportBusy(true);
+    try {
+      const response = await buildExamReport(examId, sections);
+      downloadDashboardFile(response, `考试${examId}分析报告.xlsx`);
+      if (checked[3]) message.info('考生个人成绩证明（PDF）暂不支持，本次仅导出 xlsx 部分');
+      setReportOpen(false);
+      message.success('报告已生成');
+    } catch {
+      message.error('生成报告失败');
+    } finally {
+      setReportBusy(false);
     }
   };
 
@@ -400,13 +430,10 @@ const Analytics = () => {
         title="生成分析报告"
         open={reportOpen}
         onCancel={() => setReportOpen(false)}
-        onOk={() => {
-          // TODO(backend): 报告生成暂无后端端点，当前仅本地关闭
-          setReportOpen(false);
-          message.success('已开始生成报告（演示）');
-        }}
+        onOk={() => void handleReportOk()}
         okText="开始生成"
         cancelText="取消"
+        confirmLoading={reportBusy}
         destroyOnClose
       >
         <p className="mj-modal-sub">将按当前筛选条件生成报告，处理时间约 30 秒。</p>

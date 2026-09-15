@@ -3,6 +3,7 @@
 from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.services.statistics_service import get_exam_statistics, export_exam_scores, get_dashboard_data
@@ -27,6 +28,7 @@ from app.services.score_export_service import (
     get_score_export_options,
     render_score_export,
 )
+from app.services.report_service import collect_report_data, render_report_xlsx
 from app.utils.deps import get_current_user, require_role
 from app.utils.response import success_response
 from app.models.user import User
@@ -220,3 +222,27 @@ async def get_score_export_options_endpoint(
     """返回当前用户可导出的班级与科目选项，仅教师/管理员可调用。"""
     options = await get_score_export_options(db, current_user)
     return success_response(data=options)
+
+
+class ReportReq(BaseModel):
+    """分析报告请求体：sections 缺省时返回全量（向后兼容）。"""
+
+    sections: list[str] | None = None
+
+
+@router.post("/api/statistics/exam/{exam_id}/report")
+async def build_report(
+    exam_id: int,
+    payload: ReportReq,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"])),
+):
+    """按 sections 导出考试分析报告 xlsx（成绩/质量/知识点），仅教师/管理员可调用；教师需具备该考试的管理权限。"""
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    data, used = await collect_report_data(db, exam_id, payload.sections)
+    content, media_type, filename = render_report_xlsx(data, used)
+    return StreamingResponse(
+        BytesIO(content),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

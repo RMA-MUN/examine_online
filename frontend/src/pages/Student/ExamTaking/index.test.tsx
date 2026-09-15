@@ -50,6 +50,9 @@ beforeEach(() => {
   vi.spyOn(examsApi, 'recordSwitch').mockResolvedValue({
     code: 200, message: 'success', data: null,
   } as never);
+  vi.spyOn(examsApi, 'getAnnouncements').mockResolvedValue({
+    code: 200, message: 'success', data: [],
+  } as never);
 });
 
 const renderTaking = () =>

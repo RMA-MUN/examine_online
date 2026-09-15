@@ -3,7 +3,7 @@
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,12 @@ class HandleAction(BaseModel):
     """处置监控事件请求体：warn=发送警告并留档，normal=标记为正常。"""
 
     action: Literal["warn", "normal"]
+
+
+class AnnouncementCreate(BaseModel):
+    """全屏公告请求体：教师广播文本，落库为 event_type='announcement' 的监控事件。"""
+
+    message: str = Field(min_length=1, max_length=500)
 
 
 def _event_to_dict(event: MonitorEvent) -> dict:
@@ -149,3 +155,64 @@ async def handle_exam_event(
     await db.commit()
     await db.refresh(ev)
     return success_response(data=_event_to_dict(ev))
+
+
+@router.post("/api/exams/{exam_id}/announcements", status_code=201)
+async def create_announcement(
+    exam_id: int,
+    payload: AnnouncementCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"])),
+):
+    """下发全屏公告：向该考试全部考试记录各写一条 announcement 事件（复用 monitor_events，不建新表）。
+
+    仅教师/管理员可调用；教师需有该考试管理权。学生经本接口 403，
+    经学生上报通道 POST /events 伪造 announcement 类型会被 EventCreate 校验拒绝（422）。
+    """
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    records = (
+        (await db.execute(select(ExamRecord).where(ExamRecord.exam_id == exam_id))).scalars().all()
+    )
+    for record in records:
+        db.add(
+            MonitorEvent(
+                exam_id=exam_id,
+                record_id=record.id,
+                student_id=record.student_id,
+                event_type="announcement",
+                detail={"message": payload.message},
+            )
+        )
+    await db.commit()
+    return {"code": 201, "message": "success", "data": {"exam_id": exam_id, "count": len(records)}}
+
+
+@router.get("/api/exams/{exam_id}/announcements")
+async def list_announcements(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["student", "teacher", "admin"])),
+):
+    """轮询全屏公告：教师/管理员可见本场全部 announcement 事件；学生仅可见自己名下记录的公告。"""
+    query = select(MonitorEvent).where(
+        MonitorEvent.exam_id == exam_id, MonitorEvent.event_type == "announcement"
+    )
+    if current_user.role == "student":
+        own_ids = (
+            (
+                await db.execute(
+                    select(ExamRecord.id).where(
+                        ExamRecord.exam_id == exam_id, ExamRecord.student_id == current_user.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not own_ids:
+            raise HTTPException(status_code=404, detail="记录不存在")
+        query = query.where(MonitorEvent.record_id.in_(own_ids))
+    else:
+        await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    result = await db.execute(query.order_by(MonitorEvent.id))
+    return success_response(data=[_event_to_dict(e) for e in result.scalars().all()])

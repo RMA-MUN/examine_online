@@ -49,3 +49,16 @@ export const getExamStudentScores = (
   axios.get(`/api/statistics/exam/${examId}/students`, { params }) as Promise<
     ApiResponse<{ total: number; items: StudentScoreItem[] }>
   >;
+
+export const buildExamReport = (
+  examId: number,
+  sections?: string[]
+): Promise<AxiosResponse<Blob>> =>
+  axios.post(
+    `/api/statistics/exam/${examId}/report`,
+    { sections },
+    {
+      responseType: 'blob',
+      preserveResponse: true,
+    }
+  ) as Promise<AxiosResponse<Blob>>;

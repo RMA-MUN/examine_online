@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { App, Button, Drawer, Select, Space } from 'antd';
+import { App, Button, Drawer, Input, Modal, Select, Space } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import axios from '../../api/axios';
 import { getExams } from '../../api/exams';
@@ -33,6 +33,7 @@ const EVENT_LABEL: Record<string, string> = {
   fullscreen_exit: '退出全屏',
   paste: '粘贴',
   face_lost: '人脸丢失',
+  announcement: '全屏公告',
 };
 
 type WallFilter = 'all' | WallStatus;
@@ -50,6 +51,10 @@ const Proctoring = () => {
   // 处置动作：PATCH /api/exams/{id}/events/{eventId}/handle；失败回退本地 state
   const [warnedIds, setWarnedIds] = useState<string[]>([]);
   const [normalIds, setNormalIds] = useState<string[]>([]);
+  // 全屏公告：POST /api/exams/{id}/announcements，失败提示
+  const [announceOpen, setAnnounceOpen] = useState(false);
+  const [announceText, setAnnounceText] = useState('');
+  const [announceSending, setAnnounceSending] = useState(false);
 
   useEffect(() => {
     getExams({ page_size: 100 })
@@ -210,6 +215,29 @@ const Proctoring = () => {
     }
   };
 
+  const handleAnnounce = async () => {
+    const text = announceText.trim();
+    if (examId == null) {
+      message.warning('请先选择考试');
+      return;
+    }
+    if (!text) {
+      message.warning('请填写公告内容');
+      return;
+    }
+    setAnnounceSending(true);
+    try {
+      await axios.post(`/api/exams/${examId}/announcements`, { message: text });
+      message.success('公告已下发，考生端将全屏展示');
+      setAnnounceOpen(false);
+      setAnnounceText('');
+    } catch {
+      message.error('下发公告失败');
+    } finally {
+      setAnnounceSending(false);
+    }
+  };
+
   return (
     <div className="mj-proctoring">
       <section className="page-head">
@@ -220,7 +248,7 @@ const Proctoring = () => {
           </p>
         </div>
         <div className="toolbar">
-          <Button onClick={() => message.info('全屏公告下发为演示按钮')}>下发全屏公告</Button>
+          <Button onClick={() => setAnnounceOpen(true)}>下发全屏公告</Button>
           <Button onClick={() => message.info('防作弊策略配置为演示按钮')}>防作弊策略</Button>
           <Button danger onClick={() => void handleCloseExam()}>
             结束本场考试
@@ -427,6 +455,27 @@ const Proctoring = () => {
           </div>
         </aside>
       </section>
+
+      <Modal
+        title="下发全屏公告"
+        open={announceOpen}
+        onCancel={() => setAnnounceOpen(false)}
+        onOk={() => void handleAnnounce()}
+        okText="立即下发"
+        cancelText="取消"
+        confirmLoading={announceSending}
+        destroyOnClose
+      >
+        <p className="mj-modal-sub">公告将推送给本场全部考生，考生端全屏展示，需手动确认。</p>
+        <Input.TextArea
+          rows={3}
+          maxLength={500}
+          showCount
+          placeholder="例如：剩余 10 分钟，请检查答题卡后交卷"
+          value={announceText}
+          onChange={(e) => setAnnounceText(e.target.value)}
+        />
+      </Modal>
 
       <Drawer
         title={selected ? `${selected.name} · ${selected.cls}` : '考生详情'}

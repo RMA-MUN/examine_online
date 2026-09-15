@@ -92,3 +92,18 @@ export const importBankFile = (file: File) => {
 
 export const generatePaperFromBasket = (examId: number, bankIds: number[]) =>
   axios.post(`/api/exams/${examId}/questions/from-bank`, { bank_ids: bankIds });
+
+export interface AnnouncementItem {
+  id: number;
+  exam_id: number;
+  record_id: number;
+  event_type: string;
+  detail: { message?: string } | null;
+  created_at: string;
+}
+
+export const postAnnouncement = (examId: number, message: string) =>
+  axios.post(`/api/exams/${examId}/announcements`, { message });
+
+export const getAnnouncements = (examId: number): Promise<ApiResponse<AnnouncementItem[]>> =>
+  axios.get(`/api/exams/${examId}/announcements`) as Promise<ApiResponse<AnnouncementItem[]>>;
