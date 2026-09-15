@@ -117,7 +117,26 @@ examine_online/
 
 ## 快速开始
 
-### 环境要求
+### Docker 一键启动（答辩演示，推荐）
+
+```bash
+# 首次 / 更新代码后：一键构建并后台拉起 mysql + redis + backend + frontend
+docker compose up -d --build
+
+# 查看后端初始化进度（含 init.sql 建库建表 + 演示数据 + AI worker 启动）
+docker compose logs -f backend
+```
+
+- 前端：http://localhost:3000（演示账号见下文，密码均为 `Password123!`）
+- 后端接口文档：http://localhost:8000/docs
+- 停止（保留数据）：`docker compose down`
+- 重置演示数据：`docker compose down -v && docker compose up -d --build`（删卷后下次启动自动重写种子）
+- 本地 `backend/.env`（如有）会被自动载入 JWT / AI 配置；数据库与 Redis 地址由 compose 自动覆盖为容器内地址，无需手改。
+- 如需从宿主直连容器 MySQL（如 Navicat），取消 `docker-compose.yml` 中 mysql `ports` 注释并在 `.env.docker.example` 复制出的 `.env` 里改 `MYSQL_PORT`。
+
+### 本地启动（开发调试）
+
+#### 环境要求
 - Python >= 3.12（推荐使用 [uv](https://docs.astral.sh/uv/) 管理依赖）
 - Node.js >= 18
 - MySQL 8.x、Redis
