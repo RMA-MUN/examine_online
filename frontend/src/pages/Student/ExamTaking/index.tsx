@@ -296,7 +296,7 @@ const ExamTaking = () => {
           <div>
             <div className="exam-name">{exam?.title ?? '考试进行中'}</div>
             <div className="meta">
-              {exam ? `闭卷机考 · ${total} 题 · 满分 ${exam.total_score}` : `共 ${total} 题`}
+              {exam ? `${total} 题 · 满分 ${exam.total_score}` : `共 ${total} 题`}
             </div>
           </div>
           <div className="grow" />
@@ -304,10 +304,6 @@ const ExamTaking = () => {
             <span className={`pill ${online ? 'pill-ok' : 'pill-warn'}`} id="net-pill">
               <i className="pill-dot" />
               {online ? '网络正常' : '网络断开'}
-            </span>
-            <span className="pill pill-ok" id="cam-pill">
-              <i className="pill-dot" />
-              摄像头监考演示
             </span>
           </div>
           <div className={`timer${warn ? ' warn' : ''}`}>
