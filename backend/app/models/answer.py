@@ -29,6 +29,7 @@ class Answer(Base):
         comment="当前得分来源",
     )
     override_reason = Column(Text, comment="教师改分原因")
+    teacher_comment = Column(Text, comment="教师评语（学生可见）")
     created_at = Column(DateTime, server_default=func.now())
 
     record = relationship("ExamRecord", backref="answers")
