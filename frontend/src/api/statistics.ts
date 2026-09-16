@@ -62,3 +62,31 @@ export const buildExamReport = (
       preserveResponse: true,
     }
   ) as Promise<AxiosResponse<Blob>>;
+
+export interface GradingStats {
+  pending: number;
+  done: number;
+  total: number;
+  avg_seconds_per_record: number | null;
+  consistency_rate: number | null;
+}
+
+export const getGradingStats = (examId: number): Promise<ApiResponse<GradingStats>> =>
+  axios.get(`/api/exams/${examId}/grading-stats`) as Promise<ApiResponse<GradingStats>>;
+
+export const getExamAnalytics = (examId: number): Promise<ApiResponse<{
+  items: QuestionStat[];
+  knowledge: unknown;
+  classes: unknown;
+  bins: unknown;
+  discrimination: unknown;
+}>> =>
+  axios.get(`/api/statistics/exam/${examId}/questions`, {
+    params: { include: 'knowledge,classes,bins,discrimination' },
+  }) as Promise<ApiResponse<{
+    items: QuestionStat[];
+    knowledge: unknown;
+    classes: unknown;
+    bins: unknown;
+    discrimination: unknown;
+  }>>;
