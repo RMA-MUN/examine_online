@@ -225,7 +225,8 @@ async def create_bank_question(
     current_user: User = Depends(require_role(["teacher", "admin"]))
 ):
     """新建题库题目（exam_id=null,is_bank=true），复用题目创建校验；教师需具备所属学科的管理权限。"""
-    # 政策待定：course_id=None 允许建公开题
+    if current_user.role == "teacher" and question_data.course_id is None:
+        raise HTTPException(status_code=400, detail="请选择所属学科")
     if current_user.role == "teacher" and question_data.course_id is not None:
         if not await can_teacher_manage_subject(db, current_user.id, question_data.course_id):
             raise HTTPException(status_code=403, detail="无权管理该学科题库")
@@ -357,7 +358,17 @@ async def update_question_info(
     question = await get_question(db, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="题目不存在")
-    await _ensure_teacher_can_manage_exam(db, current_user, question.exam_id)
+    if question.exam_id is None:
+        # 题库题：按所属学科守卫；公开题（course_id 为空）仅管理员可改
+        if question.course_id is None:
+            if current_user.role != "admin":
+                raise HTTPException(status_code=403, detail="无权管理该题目")
+        elif current_user.role == "teacher" and not await can_teacher_manage_subject(
+            db, current_user.id, question.course_id
+        ):
+            raise HTTPException(status_code=403, detail="无权管理该学科题库")
+    else:
+        await _ensure_teacher_can_manage_exam(db, current_user, question.exam_id)
     question = await update_question(db, question_id, question_data.model_dump(exclude_unset=True))
     if not question:
         raise HTTPException(status_code=404, detail="题目不存在")
@@ -373,7 +384,17 @@ async def delete_question_info(
     question = await get_question(db, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="题目不存在")
-    await _ensure_teacher_can_manage_exam(db, current_user, question.exam_id)
+    if question.exam_id is None:
+        # 题库题：按所属学科守卫；公开题（course_id 为空）仅管理员可改
+        if question.course_id is None:
+            if current_user.role != "admin":
+                raise HTTPException(status_code=403, detail="无权管理该题目")
+        elif current_user.role == "teacher" and not await can_teacher_manage_subject(
+            db, current_user.id, question.course_id
+        ):
+            raise HTTPException(status_code=403, detail="无权管理该学科题库")
+    else:
+        await _ensure_teacher_can_manage_exam(db, current_user, question.exam_id)
     success = await delete_question(db, question_id)
     if not success:
         raise HTTPException(status_code=404, detail="题目不存在")

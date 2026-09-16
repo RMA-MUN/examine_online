@@ -6,6 +6,7 @@ from typing import Optional
 from app.database import get_db
 from app.schemas.exam import ExamCreate, ExamUpdate, ExamResponse
 from app.services.exam_service import get_exams, get_exam, create_exam, update_exam, publish_exam, close_exam, delete_exam, get_teacher_exams
+from app.services.audit_service import log_action
 from app.services.teacher_subject_service import can_teacher_manage_exam, can_teacher_manage_subject
 from app.utils.deps import get_current_user, require_role
 from app.utils.response import success_response, paginated_response
@@ -55,6 +56,8 @@ async def create_new_exam(
     ):
         raise HTTPException(status_code=403, detail="你未被分配该学科")
     exam = await create_exam(db, exam_data.model_dump())
+    await log_action(db, actor_id=current_user.id, action="exam.create",
+                     target_type="exam", target_id=exam.id)
     return success_response(data=ExamResponse.model_validate(exam).model_dump())
 
 @router.get("/{exam_id}")
@@ -132,4 +135,6 @@ async def delete_exam_info(
     success = await delete_exam(db, exam_id)
     if not success:
         raise HTTPException(status_code=404, detail="考试不存在")
+    await log_action(db, actor_id=current_user.id, action="exam.delete",
+                     target_type="exam", target_id=exam_id)
     return success_response(message="删除成功")
