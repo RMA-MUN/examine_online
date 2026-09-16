@@ -98,3 +98,59 @@ async def delete_user(db: AsyncSession, user_id: int):
     await db.delete(user)
     await db.commit()
     return True
+
+
+async def reset_password(db: AsyncSession, user_id: int, new_password: str):
+    """管理员重置他人密码（不校验原密码）。
+
+    :return: 元组 (是否成功, 错误信息)
+    """
+    if len(new_password) < 6:
+        return False, "新密码长度不能少于6位"
+    user = await get_user(db, user_id)
+    if not user:
+        return False, "用户不存在"
+    user.password_hash = await hash_password_async(new_password)
+    await db.commit()
+    return True, None
+
+
+VALID_IMPORT_ROLES = ("student", "teacher", "admin")
+
+
+async def batch_import_users(db: AsyncSession, rows: list[dict]):
+    """批量导入用户：逐行校验，坏行跳过并收集错误，好行入库。
+
+    :return: 元组 (成功数, 错误列表 [{row, error}])
+    """
+    errors = []
+    seen = set()
+    ok = 0
+    for i, r in enumerate(rows, start=2):
+        username = str(r.get("username") or "").strip()
+        password = str(r.get("password") or "")
+        name = str(r.get("name") or "").strip()
+        role = str(r.get("role") or "").strip()
+        if not username or not password or not name:
+            errors.append({"row": i, "error": "用户名/密码/姓名不能为空"})
+            continue
+        if role not in VALID_IMPORT_ROLES:
+            errors.append({"row": i, "error": "角色仅支持 student/teacher/admin"})
+            continue
+        if len(password) < 6:
+            errors.append({"row": i, "error": "密码长度不能少于6位"})
+            continue
+        if username in seen:
+            errors.append({"row": i, "error": "文件中用户名重复"})
+            continue
+        seen.add(username)
+        try:
+            await create_user(db, {
+                "username": username, "password": password, "name": name, "role": role,
+                "email": r.get("email"), "phone": r.get("phone"),
+                "class_id": r.get("class_id"),
+            })
+            ok += 1
+        except Exception as e:
+            errors.append({"row": i, "error": getattr(e, "detail", "导入失败")})
+    return ok, errors
