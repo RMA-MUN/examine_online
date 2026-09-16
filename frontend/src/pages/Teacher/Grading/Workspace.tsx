@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { App, Button, Collapse, Input, InputNumber, Space, Spin, Switch, Tag } from 'antd';
 import { gradeAnswer, finalizeRecord, retryAiGrading } from '../../../api/grading';
+import type { GradeRequest } from '../../../types/answer';
 import { shouldShowAiGrading } from '../../../utils/aiGrading';
 import { getQuestionTypeMeta } from '../../../constants/questionTypes';
 import type { ExamRecord } from '../../../types/record';
-import type { Answer, GradeRequest } from '../../../types/answer';
+import type { Answer } from '../../../types/answer';
+import type { RubricItem } from '../../../types/question';
 import type { QuestionType } from '../../../types/question';
 
 export type GradingMode = 'by-question' | 'by-student';
@@ -25,30 +27,15 @@ export interface ScorePoint {
   score: number;
 }
 
-/** 按满分拆出评分点（合计恒等于满分，供 .pt 勾选联动总分）。
- * 占位实现：题库暂无评分点结构，待题库支持 points 字段后改用真实数据。 */
-export const buildPoints = (full: number): ScorePoint[] => {
-  if (!full || full <= 0) return [];
-  if (full < 5) return [{ id: 'p1', label: '答案正确', score: full }];
-  if (full < 10) {
-    const first = Math.ceil(full * 0.6);
-    return [
-      { id: 'p1', label: '关键内容正确', score: first },
-      { id: 'p2', label: '表述规范', score: full - first },
-    ];
+/** 由题目评分要点（grading_rubric）拆出评分点，供 .pt 勾选联动总分。
+ * rubric 缺失时回退为单个满分点（不虚构拆分）。RubricItem 形状见 backend/app/schemas/question.py：
+ * { criterion_id, criterion, points }。 */
+export const buildPoints = (full: number, rubric?: RubricItem[] | null): ScorePoint[] => {
+  if (rubric && rubric.length > 0) {
+    return rubric.map((item) => ({ id: item.criterion_id, label: item.criterion, score: item.points }));
   }
-  const p1 = Math.round(full * 0.2);
-  const p2 = Math.round(full * 0.33);
-  const p3 = Math.round(full * 0.33);
-  const p4 = full - p1 - p2 - p3;
-  const points: ScorePoint[] = [
-    { id: 'p1', label: '关键概念正确', score: p1 },
-    { id: 'p2', label: '推导过程完整', score: p2 },
-    { id: 'p3', label: '结论正确', score: p3 },
-  ];
-  if (p4 > 0) points.push({ id: 'p4', label: '表述规范', score: p4 });
-  else points[2] = { ...points[2], score: points[2].score + p4 };
-  return points;
+  if (!full || full <= 0) return [];
+  return [{ id: 'p1', label: '答案正确', score: full }];
 };
 
 const COMMENT_TEMPLATES = [
@@ -71,21 +58,25 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
   const [checkedPoints, setCheckedPoints] = useState<Record<number, string[]>>({});
   const [comments, setComments] = useState<Record<number, string>>({});
 
-  // 判分输入初始化语义与 GradingDrawer 一致：score 回填、客观题回填正确性
+  // 判分输入初始化语义与 GradingDrawer 一致：score 回填、客观题回填正确性；评语回填 teacher_comment
   useEffect(() => {
     const s: Record<number, number> = {};
     const c: Record<number, boolean> = {};
+    const cm: Record<number, string> = {};
     answers.forEach((a) => {
       s[a.id] = a.score ?? 0;
       c[a.id] = a.is_correct === true;
+      cm[a.id] = a.teacher_comment ?? '';
     });
     setScores(s);
     setCorrectness(c);
+    setComments(cm);
   }, [answers]);
 
   const current: Answer | undefined = answers[selectedIdx];
   const full = current?.question?.score ?? 0;
-  const points = useMemo(() => buildPoints(full), [full]);
+  const rubric = current?.question?.grading_rubric;
+  const points = useMemo(() => buildPoints(full, rubric), [full, rubric]);
   const isObjective = current
     ? ['single', 'multiple', 'judge'].includes(current.question?.type ?? '')
     : false;
@@ -105,6 +96,8 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
         payload.override_reason = reason;
       }
       if (objective) payload.is_correct = correctness[answer.id];
+      const comment = comments[answer.id];
+      if (comment !== undefined) payload.teacher_comment = comment;
       await gradeAnswer(answer.id, payload);
       message.success('已保存');
       onChanged?.();
@@ -304,7 +297,7 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
               <span className="pill pill-neutral">待评分</span>
             ) : (
               <span className={`pill ${overThreshold ? 'pill-warn' : 'pill-ok'}`}>
-                <i className="pill-dot" />{overThreshold ? '差异超阈值' : '差异在阈值内'}
+                <i className="pill-dot" />与 AI 差异 {diffPct.toFixed(1)}%
               </span>
             )}
           </div>
@@ -489,22 +482,9 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
                 type="button"
                 className="btn btn-secondary grow"
                 disabled={!current}
-                title="演示：本地流转，后端暂无仲裁接口"
-                onClick={() => {
-                  message.info('已标记仲裁，等待复核');
-                  onNext?.();
-                }}
-              >
-                标记仲裁
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary grow"
-                disabled={!current}
-                title="演示：本地流转，后端暂无仲裁接口"
                 onClick={() => onNext?.()}
               >
-                跳过
+                下一篇
               </button>
             </div>
             <button type="button" className="btn btn-secondary btn-block" disabled={!current} onClick={handleFinalize}>

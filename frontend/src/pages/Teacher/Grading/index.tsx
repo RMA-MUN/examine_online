@@ -4,6 +4,8 @@ import type { ColumnsType } from 'antd/es/table';
 import { useSearchParams } from 'react-router-dom';
 import { getExams } from '../../../api/exams';
 import { getExamRecords, getRecordAnswers } from '../../../api/grading';
+import { getGradingStats } from '../../../api/statistics';
+import type { GradingStats } from '../../../api/statistics';
 import type { Exam } from '../../../types/exam';
 import type { ExamRecord, RecordStatus } from '../../../types/record';
 import type { Answer } from '../../../types/answer';
@@ -23,6 +25,7 @@ const Grading = () => {
   const [mode, setMode] = useState<GradingMode>('by-question');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
+  const [examsTotal, setExamsTotal] = useState<number | null>(null);
   const [examId, setExamId] = useState<number | null>(null);
   const [records, setRecords] = useState<ExamRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -33,10 +36,15 @@ const Grading = () => {
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [answersLoading, setAnswersLoading] = useState(false);
   const [selectedQuestionIdx, setSelectedQuestionIdx] = useState(0);
+  const [gradingStats, setGradingStats] = useState<GradingStats | null>(null);
 
   useEffect(() => {
     getExams({ page_size: 100 })
-      .then((res) => setExams(res.data.items || []))
+      .then((res) => {
+        const items = res.data.items || [];
+        setExams(items);
+        setExamsTotal(typeof res.data.total === 'number' ? res.data.total : items.length);
+      })
       .catch(() => message.error('获取考试列表失败'));
   }, [message]);
 
@@ -67,6 +75,24 @@ const Grading = () => {
     if (examId) fetchRecords(examId, page, pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId, page, pageSize]);
+
+  useEffect(() => {
+    if (!examId) {
+      setGradingStats(null);
+      return;
+    }
+    let cancelled = false;
+    getGradingStats(examId)
+      .then((res) => {
+        if (!cancelled) setGradingStats(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setGradingStats(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [examId]);
 
   const selectedRecord: ExamRecord | null =
     records.find((r) => r.id === selectedRecordId) ?? records[0] ?? null;
@@ -174,7 +200,6 @@ const Grading = () => {
             按人阅卷
           </button>
         </div>
-        <span className="pill pill-neutral">演示数据</span>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRulesOpen(true)}>
           阅卷规则
         </button>
@@ -185,14 +210,12 @@ const Grading = () => {
           <h1 className="title-lg">{headTitle}</h1>
           <p className="page-sub">
             {currentAnswer
-              ? `${currentAnswer.question?.content?.slice(0, 24) ?? ''} · 满分 ${currentAnswer.question?.score ?? 0} 分 · 双评模式（评分差异超过 10% 自动触发仲裁）`
-              : '简答题 · 双评模式（评分差异超过 10% 自动触发仲裁）'}
+              ? `${currentAnswer.question?.content?.slice(0, 24) ?? ''} · 满分 ${currentAnswer.question?.score ?? 0} 分 · AI预评仅供参考`
+              : '简答题 · AI预评仅供参考'}
           </p>
         </div>
         <div className="toolbar">
           <span className="pill pill-info"><i className="pill-dot" />批次：{examTitle} · {total} 份</span>
-          {/* TODO(backend): 待接口字段——截止时间暂用静态演示值 */}
-          <span className="pill pill-neutral">本批次截止 09-17 18:00</span>
         </div>
       </section>
 
@@ -200,7 +223,6 @@ const Grading = () => {
         <div className="kpi">
           <div className="label">待阅份数</div>
           <div className="kpi-num">{pending}</div>
-          <div className="kpi-foot">其中仲裁复议 0 份</div>
         </div>
         <div className="kpi">
           <div className="label">已阅份数</div>
@@ -209,15 +231,19 @@ const Grading = () => {
         </div>
         <div className="kpi">
           <div className="label">平均用时</div>
-          {/* TODO(backend): 待接口字段——平均用时暂用静态演示值 */}
-          <div className="kpi-num">42<span style={{ fontSize: 15, fontWeight: 500 }}>秒 / 份</span></div>
-          <div className="kpi-foot">较昨日缩短 6 秒</div>
+          <div className="kpi-num">
+            {gradingStats?.avg_seconds_per_record != null
+              ? <>{Math.round(gradingStats.avg_seconds_per_record)}<span style={{ fontSize: 15, fontWeight: 500 }}>秒 / 份</span></>
+              : '—'}
+          </div>
         </div>
         <div className="kpi">
           <div className="label">双评一致性</div>
-          {/* TODO(backend): 待接口字段——一致率暂用静态演示值 */}
-          <div className="kpi-num">92<span style={{ fontSize: 15, fontWeight: 500 }}>%</span></div>
-          <div className="kpi-foot"><span className="pill pill-ok"><i className="pill-dot" />达标</span> 阈值 85%</div>
+          <div className="kpi-num">
+            {gradingStats?.consistency_rate != null
+              ? <>{(gradingStats.consistency_rate * 100).toFixed(1)}<span style={{ fontSize: 15, fontWeight: 500 }}>%</span></>
+              : '—'}
+          </div>
         </div>
       </section>
 
@@ -303,6 +329,7 @@ const Grading = () => {
         <div className="panel-body">
           <Space style={{ marginBottom: 16 }}>
             <span>选择考试：</span>
+            {examsTotal != null && examsTotal > 100 && <span className="meta">仅显示前 100，共 {examsTotal} 场考试</span>}
             <Select
               style={{ width: 280 }}
               placeholder="请选择考试"
@@ -347,7 +374,7 @@ const Grading = () => {
         <ol style={{ paddingLeft: 20, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <li>客观题（单选 / 多选 / 判断）支持一键自动判分。</li>
           <li>主观题 AI 预评仅供参考，修改 AI 评分须填写修改原因。</li>
-          <li>主观题采用双评模式，评分差异超过 10% 自动触发仲裁。</li>
+          <li>AI 预评仅供参考，教师复核为准。</li>
           <li>终评后记录锁定，如需修改请联系考务管理员。</li>
         </ol>
       </Modal>
