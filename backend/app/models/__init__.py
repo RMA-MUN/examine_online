@@ -10,9 +10,11 @@ from app.models.teacher_subject import TeacherSubject
 from app.models.exam_class import ExamClass
 from app.models.exam_student import ExamStudent
 from app.models.monitor_event import MonitorEvent
+from app.models.audit_log import AuditLog
+from app.models.system_param import SystemParam
 
 __all__ = [
     "User", "Course", "Exam", "Question", "ExamRecord", "Answer",
     "AiGradingTask", "SchoolClass", "TeacherSubject", "ExamClass", "ExamStudent",
-    "MonitorEvent",
+    "MonitorEvent", "AuditLog", "SystemParam",
 ]

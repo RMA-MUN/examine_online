@@ -21,6 +21,7 @@ from app.api.monitor import router as monitor_router
 from app.api.statistics import router as statistics_router
 from app.api.admin_classes import router as admin_classes_router
 from app.api.admin_teacher_subjects import router as admin_teacher_subjects_router
+from app.api.admin_system import router as admin_system_router
 from app.workers.ai_grading_worker import ai_grading_workers
 
 """FastAPI 应用入口：创建应用实例、注册路由与中间件，并随服务生命周期启停 AI 评分 worker。"""
@@ -63,6 +64,7 @@ app.include_router(monitor_router)
 app.include_router(statistics_router)
 app.include_router(admin_classes_router)
 app.include_router(admin_teacher_subjects_router)
+app.include_router(admin_system_router)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
