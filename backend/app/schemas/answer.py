@@ -37,6 +37,7 @@ class GradeRequest(BaseModel):
     score: int = Field(ge=0)  # 分数不能为负，上限由题目分值在接口层校验
     is_correct: Optional[bool] = None
     override_reason: Optional[str] = None  # 改分原因
+    teacher_comment: Optional[str] = None  # 教师评语（学生可见）
 
 class AiGradingResponse(BaseModel):
     """AI 阅卷结果响应。"""

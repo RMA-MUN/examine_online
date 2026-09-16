@@ -5,12 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.answer import GradeRequest
-from app.services.grading_service import get_exam_records, get_record_answers, grade_answer, finalize_record, get_exam_id_by_record, get_exam_id_by_answer
+from app.services.grading_service import get_exam_records, get_record_answers, grade_answer, finalize_record, get_exam_id_by_record, get_exam_id_by_answer, get_grading_stats
+from app.services.audit_service import log_action
 from app.services.ai_grading_service import retry_ai_grading_task
 from app.services.teacher_subject_service import can_teacher_manage_exam
 from app.utils.deps import get_current_user, require_role
 from app.utils.response import success_response, paginated_response
 from app.models.exam_record import ExamRecord
+from app.models.exam import Exam
 from app.models.question import Question
 from app.models.answer import Answer
 from app.models.user import User
@@ -85,6 +87,7 @@ async def grade_single_answer(
         grade_data.score,
         grade_data.is_correct,
         grade_data.override_reason,
+        teacher_comment=grade_data.teacher_comment,
     )
     if not answer:
         raise HTTPException(status_code=404, detail="答案不存在")
@@ -127,6 +130,8 @@ async def finalize_record_action(
     record = await finalize_record(db, record_id)
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
+    await log_action(db, actor_id=current_user.id, action="grade.finalize",
+                     target_type="record", target_id=record.id)
     return success_response(data={"id": record.id, "status": record.status})
 
 @router.get("/api/records/{record_id}/result")
@@ -149,4 +154,20 @@ async def get_my_result(
     for answer in answers:
         # 对外隐藏 AI 评分内部错误信息，仅保留评分结果
         answer["ai_grading"].pop("last_error", None)
+        # 学生端不暴露评分要点（grading_rubric），教师端保持不变
+        if isinstance(answer.get("question"), dict):
+            answer["question"]["grading_rubric"] = None
     return success_response(data=answers)
+
+@router.get("/api/exams/{exam_id}/grading-stats")
+async def get_grading_stats_action(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["teacher", "admin"]))
+):
+    """实时阅卷统计（待阅/已阅/总数/平均用时/与 AI 一致率），仅教师/管理员可调用。"""
+    exam = await db.get(Exam, exam_id)
+    if exam is None:
+        raise HTTPException(status_code=404, detail="考试不存在")
+    await _ensure_teacher_can_manage_exam(db, current_user, exam_id)
+    return success_response(data=await get_grading_stats(db, exam_id))

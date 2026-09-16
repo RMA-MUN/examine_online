@@ -1,4 +1,4 @@
-import type { QuestionType } from './question';
+import type { QuestionType, RubricItem } from './question';
 
 // 阅卷接口嵌套返回的题目信息（仅字段子集）
 export type GradingQuestion = {
@@ -7,6 +7,7 @@ export type GradingQuestion = {
   options?: string[] | null;
   answer?: string | null;
   score: number;
+  grading_rubric?: RubricItem[] | null;
 };
 
 export interface AiGrading {
@@ -33,6 +34,7 @@ export interface Answer {
   student_answer?: string | null;
   score: number;
   is_correct?: boolean | null;
+  teacher_comment?: string | null;
   graded_at?: string | null;
   grader_id?: number | null;
   created_at: string;
@@ -45,6 +47,7 @@ export interface GradeRequest {
   score: number;
   is_correct?: boolean;
   override_reason?: string;
+  teacher_comment?: string;
 }
 
 export type AnswerValue = string | string[];

@@ -116,6 +116,7 @@ async def get_record_answers(db: AsyncSession, record_id: int):
             "student_answer": a.student_answer,
             "score": a.score,
             "is_correct": a.is_correct,
+            "teacher_comment": a.teacher_comment,
             "graded_at": a.graded_at,
             "ai_grading": ai_grading,
             "question": {
@@ -123,7 +124,8 @@ async def get_record_answers(db: AsyncSession, record_id: int):
                 "content": q.content,
                 "options": options,
                 "answer": q.answer,
-                "score": q.score
+                "score": q.score,
+                "grading_rubric": q.grading_rubric
             }
         })
 
@@ -136,6 +138,7 @@ async def grade_answer(
     score: int,
     is_correct: bool = None,
     override_reason: str | None = None,
+    teacher_comment: str | None = None,
 ):
     """人工批改单题答案：写入教师分数，并覆盖 AI 评分来源。
 
@@ -153,6 +156,8 @@ async def grade_answer(
     # 只有人工分数与 AI 分数不一致时才记录覆盖原因
     if answer.ai_score is not None and score != answer.ai_score:
         answer.override_reason = override_reason
+    if teacher_comment is not None:
+        answer.teacher_comment = teacher_comment
     # 标记最终评分来源为教师，防止 AI 完成时再次覆盖本答案
     answer.grading_source = "teacher"
 
@@ -170,7 +175,7 @@ async def recalculate_total_score(db: AsyncSession, record_id: int, commit: bool
         select(Answer).where(Answer.record_id == record_id)
     )
     answers = result.scalars().all()
-    total_score = sum(a.score for a in answers)
+    total_score = sum((a.score or 0) for a in answers)
 
     result = await db.execute(select(ExamRecord).where(ExamRecord.id == record_id))
     record = result.scalar_one_or_none()
@@ -193,3 +198,52 @@ async def finalize_record(db: AsyncSession, record_id: int):
     await db.commit()
     await db.refresh(record)
     return record
+
+
+async def get_grading_stats(db: AsyncSession, exam_id: int):
+    """实时计算阅卷统计：pending/done/total + 平均用时 + AI 一致率，无数据字段为 None。"""
+    result = await db.execute(select(ExamRecord).where(ExamRecord.exam_id == exam_id))
+    records = result.scalars().all()
+    total = len(records)
+    done = sum(1 for r in records if r.status == "graded")
+    pending = total - done
+    avg_seconds = None
+    graded = [r for r in records if r.status == "graded" and r.submit_time]
+    if graded:
+        result = await db.execute(
+            select(Answer).where(Answer.record_id.in_([r.id for r in graded]))
+        )
+        by_record: dict[int, list] = {}
+        for a in result.scalars().all():
+            by_record.setdefault(a.record_id, []).append(a)
+        costs = []
+        for r in graded:
+            stamps = [a.graded_at for a in by_record.get(r.id, []) if a.graded_at]
+            if stamps and max(stamps) >= r.submit_time:
+                costs.append((max(stamps) - r.submit_time).total_seconds())
+        if costs:
+            avg_seconds = sum(costs) / len(costs)
+    consistency = None
+    result = await db.execute(
+        select(Answer, Question.score)
+        .join(ExamRecord, Answer.record_id == ExamRecord.id)
+        .join(Question, Answer.question_id == Question.id)
+        .where(ExamRecord.exam_id == exam_id)
+    )
+    rows = result.all()
+    by_id = {a.id: (a, full) for a, full in rows}
+    comparable = [
+        by_id[i] for i in by_id
+        if by_id[i][0].ai_score is not None and by_id[i][1] and by_id[i][1] > 0
+        and by_id[i][0].grading_source == "teacher"
+    ]
+    if comparable:
+        agree = sum(
+            1 for a, full in comparable
+            if abs((a.score or 0) - (a.ai_score or 0)) / full <= 0.1
+        )
+        consistency = agree / len(comparable)
+    return {
+        "pending": pending, "done": done, "total": total,
+        "avg_seconds_per_record": avg_seconds, "consistency_rate": consistency,
+    }
