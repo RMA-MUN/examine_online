@@ -3,16 +3,11 @@ import { App, Button, Drawer, Input, Modal, Select, Space } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import axios from '../../api/axios';
 import { getExams } from '../../api/exams';
+import { getExamRecords } from '../../api/grading';
 import type { ApiResponse, Paginated } from '../../types/api';
 import type { Exam } from '../../types/exam';
-import {
-  MOCK_ALERTS,
-  MOCK_EXAM_INFO,
-  MOCK_HANDLED,
-  MOCK_STUDENTS,
-  type MockStudent,
-  type WallStatus,
-} from '../../mocks/proctoring';
+import type { ExamRecord } from '../../types/record';
+import EmptyState from '../../components/EmptyState';
 import './index.css';
 
 interface MonitorEventItem {
@@ -36,22 +31,63 @@ const EVENT_LABEL: Record<string, string> = {
   announcement: '全屏公告',
 };
 
-type WallFilter = 'all' | WallStatus;
+// 切屏 / 人脸丢失属于高权重风险信号，其余事件只进告警 feed，不计入风险推导
+const RISK_EVENT_TYPES = new Set(['switch', 'face_lost']);
+
+type RiskLevel = '高风险' | '中风险' | '正常';
+
+interface WallStudent {
+  recordId: number;
+  studentId: number;
+  name: string;
+  status: ExamRecord['status'];
+  risk: RiskLevel;
+  riskCount: number;
+  eventCount: number;
+  switchCount: number;
+}
+
+const deriveRisk = (riskCount: number): RiskLevel =>
+  riskCount >= 3 ? '高风险' : riskCount >= 1 ? '中风险' : '正常';
+
+type WallFilter = 'all' | 'high' | 'mid' | 'ok';
+
+const FILTER_RISK: Record<Exclude<WallFilter, 'all'>, RiskLevel> = {
+  high: '高风险',
+  mid: '中风险',
+  ok: '正常',
+};
+
+const RISK_PILL_CLASS: Record<RiskLevel, string> = {
+  高风险: 'pill-danger',
+  中风险: 'pill-warn',
+  正常: 'pill-ok',
+};
+
+const RECORD_STATUS_LABEL: Record<ExamRecord['status'], string> = {
+  ongoing: '作答中',
+  submitted: '已交卷',
+  graded: '已交卷',
+};
 
 const Proctoring = () => {
   const { message } = App.useApp();
   const [exams, setExams] = useState<Exam[]>([]);
   const [examId, setExamId] = useState<number | null>(null);
-  // 实时事件流：轮询成功且非空时覆盖告警 feed，失败/空时回退 mock
+  // 实时事件流：GET /api/exams/{id}/events（分页），5 秒轮询
   const [events, setEvents] = useState<MonitorEventItem[]>([]);
+  const [eventsTotal, setEventsTotal] = useState<number | null>(null);
+  // 考生记录：GET /api/exams/{id}/records（分页，含 student 嵌入），提供名单与交卷状态
+  const [records, setRecords] = useState<ExamRecord[]>([]);
+  const [recordsTotal, setRecordsTotal] = useState<number | null>(null);
   const [filter, setFilter] = useState<WallFilter>('all');
-  const [selected, setSelected] = useState<MockStudent | null>(null);
-  // Drawer 时间线：优先调真接口 GET /api/records/{id}/events，失败/为空回退 mock
+  const [selected, setSelected] = useState<WallStudent | null>(null);
+  // Drawer 时间线：GET /api/records/{id}/events（数组）
   const [recordEvents, setRecordEvents] = useState<MonitorEventItem[] | null>(null);
-  // 处置动作：PATCH /api/exams/{id}/events/{eventId}/handle；失败回退本地 state
+  // 处置动作：PATCH /api/exams/{id}/events/{eventId}/handle
   const [warnedIds, setWarnedIds] = useState<string[]>([]);
   const [normalIds, setNormalIds] = useState<string[]>([]);
-  // 全屏公告：POST /api/exams/{id}/announcements，失败提示
+  // 全屏公告：POST /api/exams/{id}/announcements
   const [announceOpen, setAnnounceOpen] = useState(false);
   const [announceText, setAnnounceText] = useState('');
   const [announceSending, setAnnounceSending] = useState(false);
@@ -63,7 +99,7 @@ const Proctoring = () => {
         setExams(items);
         setExamId(items[0]?.id ?? null);
       })
-      .catch(() => message.error('获取考试列表失败，已展示演示数据'));
+      .catch(() => message.error('获取考试列表失败'));
   }, [message]);
 
   const fetchEvents = useCallback(async (id: number) => {
@@ -71,51 +107,101 @@ const Proctoring = () => {
       const res = (await axios.get(`/api/exams/${id}/events`, {
         params: { page: 1, page_size: 100 },
       })) as unknown as ApiResponse<Paginated<MonitorEventItem>>;
-      setEvents(res?.data?.items ?? []);
+      const items = res?.data?.items ?? [];
+      setEvents(items);
+      setEventsTotal(typeof res?.data?.total === 'number' ? res.data.total : items.length);
     } catch {
       setEvents([]);
+      setEventsTotal(null);
+    }
+  }, []);
+
+  const fetchRecords = useCallback(async (id: number) => {
+    try {
+      const res = await getExamRecords(id, { page: 1, page_size: 100 });
+      const items = res?.data?.items ?? [];
+      setRecords(items);
+      setRecordsTotal(typeof res?.data?.total === 'number' ? res.data.total : items.length);
+    } catch {
+      setRecords([]);
+      setRecordsTotal(null);
     }
   }, []);
 
   useEffect(() => {
     if (examId == null) return;
     fetchEvents(examId);
+    fetchRecords(examId);
     const timer = window.setInterval(() => fetchEvents(examId), 5000);
     return () => window.clearInterval(timer);
-  }, [examId, fetchEvents]);
+  }, [examId, fetchEvents, fetchRecords]);
+
+  const eventsByRecord = useMemo(() => {
+    const map = new Map<number, MonitorEventItem[]>();
+    for (const e of events) {
+      const list = map.get(e.record_id) ?? [];
+      list.push(e);
+      map.set(e.record_id, list);
+    }
+    return map;
+  }, [events]);
+
+  // 监控墙：记录 × 事件聚合，风险由切屏/人脸丢失事件数推导（≥3 高风险，1–2 中风险）
+  const wall = useMemo<WallStudent[]>(
+    () =>
+      records.map((r) => {
+        const evs = eventsByRecord.get(r.id) ?? [];
+        const riskCount = evs.filter((e) => RISK_EVENT_TYPES.has(e.event_type)).length;
+        return {
+          recordId: r.id,
+          studentId: r.student_id,
+          name: r.student?.name || r.student?.username || `考生 #${r.student_id}`,
+          status: r.status,
+          risk: deriveRisk(riskCount),
+          riskCount,
+          eventCount: evs.length,
+          switchCount: r.switch_count ?? evs.filter((e) => e.event_type === 'switch').length,
+        };
+      }),
+    [records, eventsByRecord],
+  );
 
   const visible = useMemo(
-    () => (filter === 'all' ? MOCK_STUDENTS : MOCK_STUDENTS.filter((s) => s.status === filter)),
-    [filter],
+    () => (filter === 'all' ? wall : wall.filter((s) => s.risk === FILTER_RISK[filter])),
+    [filter, wall],
   );
 
   const feed = useMemo(
     () =>
-      events.length > 0
-        ? events.map((e) => ({
-            k: e.event_type === 'face_lost' || e.event_type === 'switch' ? 'danger' : 'warn',
-            n: EVENT_LABEL[e.event_type] ?? e.event_type,
-            m: `记录 #${e.record_id} · ${e.created_at}`,
-          }))
-        : MOCK_ALERTS,
+      events.map((e) => ({
+        id: e.id,
+        k: e.event_type === 'face_lost' || e.event_type === 'switch' ? 'danger' : 'warn',
+        n: EVENT_LABEL[e.event_type] ?? e.event_type,
+        m: `记录 #${e.record_id} · ${e.created_at}${e.handled_action === 'warn' ? ' · 已警告' : e.handled_action === 'normal' ? ' · 已标正常' : ''}`,
+      })),
     [events],
   );
 
-  const usingMock = events.length === 0;
-  const examTitle = exams.find((e) => e.id === examId)?.title ?? MOCK_EXAM_INFO.title;
+  // 处置记录：事件流中 handled_action 非空的事件
+  const handled = useMemo(() => events.filter((e) => e.handled_action != null), [events]);
 
-  const openDrawer = (s: MockStudent) => setSelected(s);
+  const submittedCount = useMemo(
+    () => records.filter((r) => r.status === 'submitted' || r.status === 'graded').length,
+    [records],
+  );
+  const highRiskCount = useMemo(() => wall.filter((s) => s.risk === '高风险').length, [wall]);
+  const midRiskCount = useMemo(() => wall.filter((s) => s.risk === '中风险').length, [wall]);
+
+  const examTitle = exams.find((e) => e.id === examId)?.title ?? '请选择考试';
+
+  const openDrawer = (s: WallStudent) => setSelected(s);
 
   useEffect(() => {
     if (selected == null) {
       setRecordEvents(null);
       return;
     }
-    const recordId = Number(selected.id);
-    if (!Number.isFinite(recordId)) {
-      setRecordEvents(null);
-      return;
-    }
+    const recordId = selected.recordId;
     let cancelled = false;
     (async () => {
       try {
@@ -124,7 +210,7 @@ const Proctoring = () => {
         >;
         if (!cancelled) setRecordEvents(res?.data ?? []);
       } catch {
-        if (!cancelled) setRecordEvents(null);
+        if (!cancelled) setRecordEvents([]);
       }
     })();
     return () => {
@@ -133,19 +219,18 @@ const Proctoring = () => {
   }, [selected]);
 
   const drawerTimeline = useMemo(() => {
-    if (recordEvents && recordEvents.length > 0) {
-      return recordEvents.map((e) => ({
-        k: (e.event_type === 'face_lost' || e.event_type === 'switch' ? 'danger' : 'warn') as
-          | 'danger'
-          | 'warn'
-          | 'ok',
-        n: EVENT_LABEL[e.event_type] ?? e.event_type,
-        t: e.created_at,
-        m: `记录 #${e.record_id}`,
-      }));
-    }
-    return selected?.events ?? [];
-  }, [recordEvents, selected]);
+    if (recordEvents == null || recordEvents.length === 0) return [];
+    return recordEvents.map((e) => ({
+      id: e.id,
+      k: (e.event_type === 'face_lost' || e.event_type === 'switch' ? 'danger' : 'warn') as
+        | 'danger'
+        | 'warn'
+        | 'ok',
+      n: EVENT_LABEL[e.event_type] ?? e.event_type,
+      t: e.created_at,
+      m: `记录 #${e.record_id}${e.handled_action === 'warn' ? ' · 已警告' : e.handled_action === 'normal' ? ' · 已标正常' : ''}`,
+    }));
+  }, [recordEvents]);
 
   // Drawer 当前记录下首条未处置事件：全处置时返 null，不再回退首条，避免重复 PATCH 已处置事件
   const pendingEvent = useMemo(
@@ -153,12 +238,13 @@ const Proctoring = () => {
     [recordEvents],
   );
 
-  const handleEventAction = async (s: MockStudent, action: 'warn' | 'normal') => {
+  const handleEventAction = async (s: WallStudent, action: 'warn' | 'normal') => {
+    const key = String(s.recordId);
     const markLocal = () => {
       if (action === 'warn') {
-        setWarnedIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]));
+        setWarnedIds((prev) => (prev.includes(key) ? prev : [...prev, key]));
       } else {
-        setNormalIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]));
+        setNormalIds((prev) => (prev.includes(key) ? prev : [...prev, key]));
       }
     };
     if (examId != null && pendingEvent != null) {
@@ -182,47 +268,44 @@ const Proctoring = () => {
         }
         return;
       } catch {
-        // 后端不可用时回退演示占位
+        message.error('处置事件失败');
+        return;
       }
     }
-    markLocal();
-    message.info(
-      action === 'warn' ? `已向 ${s.name} 发送警告（演示占位）` : `已将 ${s.name} 标记为正常（演示占位）`,
-    );
+    if (pendingEvent == null && recordEvents != null) {
+      message.info('暂无待处置事件');
+      return;
+    }
+    message.warning('事件流加载中，请稍后重试');
   };
 
-  const handleWarn = (s: MockStudent) => {
+  const handleWarn = (s: WallStudent) => {
     void handleEventAction(s, 'warn');
   };
 
-  const handleForceSubmit = async (s: MockStudent) => {
-    const recordId = Number(s.id);
-    if (Number.isFinite(recordId)) {
-      try {
-        await axios.post(`/api/records/${recordId}/force-submit`);
-        message.success(`已对 ${s.name} 下发强制交卷`);
-        return;
-      } catch {
-        // 后端不可用时回退演示占位
-      }
+  const handleForceSubmit = async (s: WallStudent) => {
+    try {
+      await axios.post(`/api/records/${s.recordId}/force-submit`);
+      message.success(`已对 ${s.name} 下发强制交卷`);
+    } catch {
+      message.error('强制交卷失败');
     }
-    message.info(`已对 ${s.name} 下发强制交卷（演示占位）`);
   };
 
-  const handleMarkNormal = (s: MockStudent) => {
+  const handleMarkNormal = (s: WallStudent) => {
     void handleEventAction(s, 'normal');
   };
 
   const handleCloseExam = async () => {
     if (examId == null) {
-      message.warning('演示环境不支持结束考试');
+      message.warning('请先选择考试');
       return;
     }
     try {
       await axios.put(`/api/exams/${examId}/close`);
       message.success('已结束本场考试');
     } catch {
-      message.warning('结束考试失败，当前为演示数据');
+      message.error('结束考试失败');
     }
   };
 
@@ -257,62 +340,59 @@ const Proctoring = () => {
     }
   };
 
+  const selectedKey = selected ? String(selected.recordId) : null;
+
   return (
     <div className="mj-proctoring">
       <section className="page-head">
         <div>
           <h1 className="title-lg">考试监控与防作弊</h1>
-          <p className="page-sub">
-            {examTitle} · {MOCK_EXAM_INFO.clazz} · 剩余 <span className="num">{MOCK_EXAM_INFO.remain}</span> 分钟
-          </p>
+          <p className="page-sub">{examTitle}</p>
         </div>
         <div className="toolbar">
           <Button onClick={() => setAnnounceOpen(true)}>下发全屏公告</Button>
-          <Button disabled title="P2 不做：策略引擎未立项，仅演示占位">
-            防作弊策略
-          </Button>
           <Button danger onClick={() => void handleCloseExam()}>
             结束本场考试
           </Button>
         </div>
       </section>
 
-      <section className="banner banner-warn">
-        <span>
-          <b>{MOCK_EXAM_INFO.highRisk} 名考生</b> 触发高风险告警（连续切屏 / 检测到第二张人脸），建议立即人工复核。
-        </span>
-      </section>
+      {highRiskCount > 0 && (
+        <section className="banner banner-warn">
+          <span>
+            <b>{highRiskCount} 名考生</b> 触发高风险告警（切屏 / 人脸丢失事件≥3 次），建议立即人工复核。
+          </span>
+        </section>
+      )}
 
       <section className="kpi-grid" aria-label="监控指标">
         <div className="kpi">
-          <div className="label">在线考生</div>
-          <div className="kpi-num">
-            {MOCK_EXAM_INFO.online}
-            <span className="muted">/{MOCK_EXAM_INFO.total}</span>
-          </div>
+          <div className="label">考生记录</div>
+          <div className="kpi-num">{records.length}</div>
           <div className="kpi-foot">
-            交卷 <span className="num">{MOCK_EXAM_INFO.submitted}</span> 人 · 平均进度{' '}
-            <span className="num">{MOCK_EXAM_INFO.progress}%</span>
+            已交卷 <span className="num">{submittedCount}</span> 人 · 作答中{' '}
+            <span className="num">{records.length - submittedCount}</span> 人
           </div>
         </div>
         <div className="kpi">
-          <div className="label">异常行为</div>
-          <div className="kpi-num danger">{MOCK_ALERTS.length}</div>
+          <div className="label">监控事件</div>
+          <div className="kpi-num danger">{events.length}</div>
           <div className="kpi-foot">
             <span className="pill pill-danger">
-              <i className="pill-dot" />高风险 {MOCK_EXAM_INFO.highRisk}
+              <i className="pill-dot" />
+              高风险 {highRiskCount}
             </span>
-            <span className="pill pill-warn">中风险 {MOCK_EXAM_INFO.midRisk}</span>
+            <span className="pill pill-warn">中风险 {midRiskCount}</span>
           </div>
         </div>
         <div className="kpi">
-          <div className="label">离线 / 断线</div>
-          <div className="kpi-num">{MOCK_EXAM_INFO.offline}</div>
-          <div className="kpi-foot">断线超过 60 秒将自动暂停计时</div>
+          <div className="label">已交卷</div>
+          <div className="kpi-num">{submittedCount}</div>
+          <div className="kpi-foot">含已评分记录</div>
         </div>
         <div className="kpi">
-          <div className="label">已下发警告</div>
-          <div className="kpi-num">{MOCK_EXAM_INFO.warned}</div>
+          <div className="label">已处置事件</div>
+          <div className="kpi-num">{handled.length}</div>
           <div className="kpi-foot">处置记录已同步至教务留档</div>
         </div>
       </section>
@@ -332,40 +412,28 @@ const Proctoring = () => {
             </div>
           </div>
           <div className="rail-group">
-            <div className="label">防作弊策略</div>
-            <div className="stack-sm policy-list">
-              {['切屏检测与记录', '摄像头人脸核验', '第二张人脸检测', '多设备登录拦截', '题目与选项乱序'].map((name) => (
-                <div className="between" key={name}>
-                  <span className="policy-name">{name}</span>
-                  <span className="pill pill-ok">已启用</span>
-                </div>
-              ))}
-              <div className="between">
-                <span className="policy-name">复制粘贴禁用</span>
-                <span className="pill pill-neutral">未启用</span>
-              </div>
-            </div>
-          </div>
-          <div className="rail-group">
             <div className="label">图例</div>
             <div className="stack-sm legend-list">
               <div className="row">
-                <span className="tile-live ok">
-                  <i />
+                <span className="pill pill-danger">
+                  <i className="pill-dot" />
+                  高风险
                 </span>
-                <span className="legend-text">正常作答</span>
+                <span className="legend-text">切屏 / 人脸丢失事件≥3</span>
               </div>
               <div className="row">
-                <span className="tile-live alert">
-                  <i />
+                <span className="pill pill-warn">
+                  <i className="pill-dot" />
+                  中风险
                 </span>
-                <span className="legend-text">异常告警</span>
+                <span className="legend-text">切屏 / 人脸丢失事件 1–2</span>
               </div>
               <div className="row">
-                <span className="tile-live off">
-                  <i />
+                <span className="pill pill-ok">
+                  <i className="pill-dot" />
+                  正常
                 </span>
-                <span className="legend-text">离线 / 已交卷</span>
+                <span className="legend-text">无切屏 / 人脸丢失事件</span>
               </div>
             </div>
           </div>
@@ -376,7 +444,7 @@ const Proctoring = () => {
             <div className="row">
               <span className="title-sm">实时监控墙</span>
               <span className="meta">
-                {visible.length} / {MOCK_EXAM_INFO.total} 路
+                {visible.length} / {records.length} 路
               </span>
             </div>
             <div className="row">
@@ -384,54 +452,70 @@ const Proctoring = () => {
                 <button type="button" className={filter === 'all' ? 'on' : ''} onClick={() => setFilter('all')}>
                   全部
                 </button>
+                <button
+                  type="button"
+                  className={filter === 'high' ? 'on' : ''}
+                  onClick={() => setFilter('high')}
+                >
+                  高风险
+                </button>
+                <button type="button" className={filter === 'mid' ? 'on' : ''} onClick={() => setFilter('mid')}>
+                  中风险
+                </button>
                 <button type="button" className={filter === 'ok' ? 'on' : ''} onClick={() => setFilter('ok')}>
                   正常
-                </button>
-                <button type="button" className={filter === 'alert' ? 'on' : ''} onClick={() => setFilter('alert')}>
-                  告警
-                </button>
-                <button type="button" className={filter === 'off' ? 'on' : ''} onClick={() => setFilter('off')}>
-                  离线
                 </button>
               </div>
               <Button
                 size="small"
                 icon={<ReloadOutlined />}
-                onClick={() => examId != null && fetchEvents(examId)}
+                onClick={() => {
+                  if (examId == null) return;
+                  fetchEvents(examId);
+                  fetchRecords(examId);
+                }}
               >
                 刷新
               </Button>
             </div>
           </div>
           <div className="panel-body">
-            <div className="wall">
-              {visible.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={`tile${selected?.id === s.id ? ' on' : ''}`}
-                  onClick={() => openDrawer(s)}
-                >
-                  {s.status === 'alert' && <span className="tile-flag">{s.flag}</span>}
-                  <div className="tile-top">
-                    <span className="tile-mono">{s.name.slice(0, 1)}</span>
-                    <span className={`tile-live ${s.status === 'ok' ? '' : s.status}`}>
-                      <i />
-                      {s.status === 'ok' ? 'LIVE' : s.status === 'alert' ? 'ALERT' : 'OFF'}
-                    </span>
-                  </div>
-                  <div className="tile-bot">
-                    <div className="tile-name">{s.name}</div>
-                    <div className="tile-id">
-                      {s.cls} · 进度 {s.progress}%
+            {recordsTotal != null && recordsTotal > 100 && <p className="meta">仅显示前 100，共 {recordsTotal} 条</p>}
+            {visible.length > 0 ? (
+              <div className="wall">
+                {visible.map((s) => (
+                  <button
+                    key={s.recordId}
+                    type="button"
+                    className={`tile${selected?.recordId === s.recordId ? ' on' : ''}`}
+                    onClick={() => openDrawer(s)}
+                  >
+                    {s.risk !== '正常' && (
+                      <span className="tile-flag">
+                        {s.risk} · {s.riskCount} 次
+                      </span>
+                    )}
+                    <div className="tile-top">
+                      <span className="tile-mono">{s.name.slice(0, 1)}</span>
+                      <span className={`pill ${RISK_PILL_CLASS[s.risk]}`}>{s.risk}</span>
                     </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                    <div className="tile-bot">
+                      <div className="tile-name">{s.name}</div>
+                      <div className="tile-id">
+                        记录 #{s.recordId} · 事件 {s.eventCount} · {RECORD_STATUS_LABEL[s.status]}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title={examId == null ? '请先选择考试' : '暂无考生记录'}
+                description={examId == null ? undefined : '本场考试暂无考生记录'}
+              />
+            )}
             <p className="meta wall-note">
-              {usingMock ? '后端事件流不可用，当前为本地演示占位。' : `已连接实时事件流（${events.length} 条）。`}
-              画面为原型占位示意，实际监考画面由考生端摄像头实时推流。
+              暂无视频流，列表为事件聚合。风险由切屏 / 人脸丢失事件数推导（≥3 高风险，1–2 中风险）。
             </p>
           </div>
         </div>
@@ -445,17 +529,24 @@ const Proctoring = () => {
                 {feed.length} 条
               </span>
             </div>
-            <div className="feed">
-              {feed.map((a, idx) => (
-                <div className="feed-item" key={`${a.n}-${idx}`}>
-                  <span className={`feed-ico ico-${a.k}`}>{a.k === 'info' ? 'i' : '!'}</span>
-                  <div>
-                    <div className="feed-t">{a.n}</div>
-                    <div className="feed-m">{a.m}</div>
+            {eventsTotal != null && eventsTotal > 100 && <p className="meta">仅显示前 100，共 {eventsTotal} 条</p>}
+            {feed.length > 0 ? (
+              <div className="feed">
+                {feed.map((a) => (
+                  <div className="feed-item" key={a.id}>
+                    <span className={`feed-ico ico-${a.k}`}>{a.k === 'info' ? 'i' : '!'}</span>
+                    <div>
+                      <div className="feed-t">{a.n}</div>
+                      <div className="feed-m">{a.m}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="panel-body">
+                <EmptyState title="暂无异常事件" description="本场考试暂无监控事件上报" />
+              </div>
+            )}
           </div>
           <div className="panel handled-panel">
             <div className="panel-head">
@@ -463,15 +554,23 @@ const Proctoring = () => {
               <span className="meta">今日</span>
             </div>
             <div className="panel-body stack-sm">
-              {MOCK_HANDLED.map((h) => (
-                <div className="between" key={h.t}>
-                  <div>
-                    <div className="handled-title">{h.t}</div>
-                    <div className="meta handled-meta">{h.m}</div>
+              {handled.length > 0 ? (
+                handled.map((h) => (
+                  <div className="between" key={h.id}>
+                    <div>
+                      <div className="handled-title">
+                        {h.handled_action === 'warn' ? '已发送警告' : '已标记正常'}
+                      </div>
+                      <div className="meta handled-meta">
+                        记录 #{h.record_id} · {h.created_at}
+                      </div>
+                    </div>
+                    <span className="pill pill-info">留档</span>
                   </div>
-                  <span className={`pill ${h.c}`}>留档</span>
-                </div>
-              ))}
+                ))
+              ) : (
+                <EmptyState title="暂无处置记录" />
+              )}
             </div>
           </div>
         </aside>
@@ -499,7 +598,7 @@ const Proctoring = () => {
       </Modal>
 
       <Drawer
-        title={selected ? `${selected.name} · ${selected.cls}` : '考生详情'}
+        title={selected ? `${selected.name} · 记录 #${selected.recordId}` : '考生详情'}
         open={selected != null}
         onClose={() => setSelected(null)}
         width={480}
@@ -507,51 +606,46 @@ const Proctoring = () => {
         {selected && (
           <div className="drawer-stack">
             <p className="meta">
-              学号 {selected.id} · 风险等级 {selected.risk}
-              {warnedIds.includes(selected.id) && ' · 已警告'}
-              {normalIds.includes(selected.id) && ' · 已标记正常'}
+              考生 #{selected.studentId} · 风险等级 {selected.risk}（由切屏 / 人脸丢失事件数推导）
+              {selectedKey != null && warnedIds.includes(selectedKey) && ' · 已警告'}
+              {selectedKey != null && normalIds.includes(selectedKey) && ' · 已标记正常'}
             </p>
             <div className="answer-grid">
               <div className="answer-box">
-                <div className="label">人脸核验</div>
-                <div className="answer-val">{selected.face}</div>
-              </div>
-              <div className="answer-box">
-                <div className="label">设备状态</div>
-                <div className="answer-val">
-                  摄像头 {selected.cam} · 麦克风 {selected.mic}
-                </div>
-              </div>
-              <div className="answer-box">
                 <div className="label">切屏次数</div>
-                <div className="answer-val">{selected.switches} 次</div>
+                <div className="answer-val">{selected.switchCount} 次</div>
               </div>
               <div className="answer-box">
-                <div className="label">网络</div>
-                <div className="answer-val">{selected.net}</div>
+                <div className="label">风险事件</div>
+                <div className="answer-val">{selected.riskCount} 次</div>
+              </div>
+              <div className="answer-box">
+                <div className="label">监控事件</div>
+                <div className="answer-val">{selected.eventCount} 条</div>
+              </div>
+              <div className="answer-box">
+                <div className="label">作答状态</div>
+                <div className="answer-val">{RECORD_STATUS_LABEL[selected.status]}</div>
               </div>
             </div>
             <div>
-              <div className="label drawer-label">行为时间线{recordEvents && recordEvents.length > 0 ? '' : '（演示数据）'}</div>
-              <div className="tl">
-                {drawerTimeline.map((ev, idx) => (
-                  <div className={`tl-item ${ev.k}`} key={`${ev.t}-${idx}`}>
-                    <div className="tl-t">{ev.n}</div>
-                    <div className="tl-m">
-                      {ev.t} · {ev.m}
+              <div className="label drawer-label">行为时间线</div>
+              {recordEvents == null ? (
+                <p className="meta">事件流加载中…</p>
+              ) : drawerTimeline.length > 0 ? (
+                <div className="tl">
+                  {drawerTimeline.map((ev) => (
+                    <div className={`tl-item ${ev.k}`} key={ev.id}>
+                      <div className="tl-t">{ev.n}</div>
+                      <div className="tl-m">
+                        {ev.t} · {ev.m}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="label drawer-label">答题进度</div>
-              <div className="hbar">
-                <div className="hbar-track">
-                  <i className="high" style={{ width: `${selected.progress}%` }} />
+                  ))}
                 </div>
-                <span className="hbar-val">{selected.progress}%</span>
-              </div>
+              ) : (
+                <EmptyState title="暂无事件" description="该记录暂无监控事件" />
+              )}
             </div>
             <Space>
               <Button type="primary" danger onClick={() => handleWarn(selected)}>
