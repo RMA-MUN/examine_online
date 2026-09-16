@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { App, Button, Input, Select } from 'antd';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { App, Button, Form, Input, Modal, Pagination, Select } from 'antd';
 import { Link } from 'react-router-dom';
-import { getUsers } from '../../api/users';
+import axios from '../../api/axios';
+import { getUsers, importUsersFile, resetUserPassword } from '../../api/users';
 import { getClasses } from '../../api/classes';
+import type { ApiResponse, Paginated } from '../../types/api';
 import type { User, UserRole } from '../../types/user';
 import type { Class } from '../../types/class';
 import './index.css';
@@ -53,17 +55,39 @@ const PERM_DEFAULT: Record<string, [boolean, boolean, boolean]> = {
   '管理数据备份': [false, false, true],
 };
 
-/** 操作日志演示数据：照抄参考 admin.html LOGS（7 条）。 */
-// TODO(backend): 操作日志暂无后端端点，当前为本地 mock，待审计日志接口落地后替换
-const MOCK_LOGS = [
-  { k: 'warn', ic: '!', t: '权限变更：教务管理员新增“配置防作弊策略”', m: '陈静 · 14:52:07 · IP 10.20.3.41' },
-  { k: 'info', ic: 'i', t: '考试操作：结束《计算机网络》随堂测', m: '赵鹏 · 13:10:22 · 118 人正常交卷' },
-  { k: 'ok', ic: '✓', t: '成绩发布：《大学英语（三）》期末机考', m: '陈静 · 11:38:55 · 410 人已发布' },
-  { k: 'danger', ic: '!', t: '登录异常：连续 5 次密码错误，账号已锁定 30 分钟', m: 'sys · 09:14:03 · IP 118.24.61.7' },
-  { k: 'info', ic: 'i', t: '系统参数：自动保存间隔由 30 秒调整为 15 秒', m: '系统运维 · 08:05:41' },
-  { k: 'ok', ic: '✓', t: '数据备份：全量备份成功（42.7 GB）', m: '系统自动 · 06:00:00' },
-  { k: 'info', ic: 'i', t: '用户导入：新增学生账号 62 个', m: '陈静 · 昨天 17:20:11' },
+/** 审计日志行（GET /api/admin/logs 分页 items）。 */
+interface AdminLog {
+  id: number;
+  actor_id: number | null;
+  action: string;
+  target_type: string | null;
+  target_id: number | null;
+  ip: string | null;
+  detail: unknown;
+  created_at: string;
+}
+
+const LOG_TYPE_OPTIONS = [
+  { value: '', label: '全部' },
+  { value: 'user.', label: '用户' },
+  { value: 'exam.', label: '考试' },
+  { value: 'grade.', label: '阅卷' },
+  { value: 'system_', label: '系统' },
 ];
+
+/** 系统参数 key（11 个，后端白名单）：文本 5 + 开关 6，与 switchLabels 一一对应。 */
+const SWITCH_PARAM_KEYS = [
+  'switch.show_objective_score',
+  'switch.show_answer',
+  'switch.auto_objective',
+  'switch.ai_assist',
+  'switch.double_review_audit',
+  'switch.allow_appeal',
+];
+
+interface ResetPwdFormValues {
+  new_password: string;
+}
 
 const ROLE_PILL: Record<string, string> = {
   student: 'pill-neutral',
@@ -96,51 +120,32 @@ const Admin = () => {
 
   // users Tab：复用 UserManage 数据逻辑（getUsers/getClasses），换 .ds-table 皮肤
   const [users, setUsers] = useState<User[]>([]);
+  const [usersTotal, setUsersTotal] = useState<number | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [classesTotal, setClassesTotal] = useState<number | null>(null);
   const [kw, setKw] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
 
-  useEffect(() => {
+  // users Tab：批量导入（隐藏 file input，经 importUsersFile 落盘）
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  // users Tab：行内重置密码 Modal
+  const [pwdUser, setPwdUser] = useState<User | null>(null);
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [pwdForm] = Form.useForm<ResetPwdFormValues>();
+
+  const refreshUsers = () => {
     getUsers({ page: 1, page_size: 100 })
-      .then((res) => setUsers(res.data.items || []))
+      .then((res) => {
+        setUsers(res.data.items || []);
+        setUsersTotal(typeof res.data.total === 'number' ? res.data.total : (res.data.items || []).length);
+      })
       .catch(() => message.error('获取用户列表失败'));
-    getClasses({ page: 1, page_size: 100 })
-      .then((res) => setClasses(res.data.items || []))
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const filteredUsers = useMemo(() => {
-    const k = kw.trim().toLowerCase();
-    return users.filter((u) => {
-      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
-      if (stateFilter !== 'all') {
-        const st = u.is_active ? '正常' : '停用';
-        if (st !== stateFilter) return false;
-      }
-      if (k && `${u.name}${u.username}`.toLowerCase().indexOf(k) < 0) return false;
-      return true;
-    });
-  }, [users, kw, roleFilter, stateFilter]);
-
-  const classNameOf = (u: User) =>
-    u.class_id ? classes.find((c) => c.id === u.class_id)?.name ?? String(u.class_id) : '—';
-
-  // roles Tab：本地勾选（后端无权限矩阵接口）
-  // TODO(backend): 权限矩阵保存暂无后端端点，当前仅本地 state，待角色权限接口落地后替换
-  const [perms, setPerms] = useState(PERM_DEFAULT);
-  const togglePerm = (item: string, idx: number) => {
-    setPerms((prev) => {
-      const cur = prev[item] ?? [false, false, false];
-      const next = [cur[0], cur[1], cur[2]] as [boolean, boolean, boolean];
-      next[idx] = !next[idx];
-      return { ...prev, [item]: next };
-    });
   };
 
-  // params Tab：本地 state（无考试参数接口）
-  // TODO(backend): 考试默认参数暂无后端端点，当前为本地 state，待系统参数接口落地后替换
+  // params Tab：GET/PUT /api/admin/params（11 个 key，开关值为 "true"/"false" 字符串）
   const [dur, setDur] = useState('120');
   const [pass, setPass] = useState('60');
   const [save, setSave] = useState('15');
@@ -158,16 +163,156 @@ const Admin = () => {
   const toggleSwitch = (i: number) =>
     setSwitches((prev) => prev.map((v, idx) => (idx === i ? !v : v)));
 
+  const applyParams = (map: Record<string, string>) => {
+    if (map['default.duration'] != null) setDur(map['default.duration']);
+    if (map['default.pass_score'] != null) setPass(map['default.pass_score']);
+    if (map['default.save_interval'] != null) setSave(map['default.save_interval']);
+    if (map['default.grace_seconds'] != null) setGrace(map['default.grace_seconds']);
+    if (map['default.max_switch'] != null) setMaxSwitch(map['default.max_switch']);
+    setSwitches(SWITCH_PARAM_KEYS.map((k) => map[k] === 'true'));
+  };
+
+  const loadParams = () => {
+    axios
+      .get('/api/admin/params')
+      .then((res: unknown) => {
+        const map = (res as ApiResponse<Record<string, string>>)?.data ?? {};
+        applyParams(map);
+      })
+      .catch(() => message.error('获取系统参数失败'));
+  };
+
+  const handleSaveParams = async () => {
+    const items: Record<string, string> = {
+      'default.duration': dur,
+      'default.pass_score': pass,
+      'default.save_interval': save,
+      'default.grace_seconds': grace,
+      'default.max_switch': maxSwitch,
+    };
+    SWITCH_PARAM_KEYS.forEach((k, i) => {
+      items[k] = switches[i] ? 'true' : 'false';
+    });
+    try {
+      await axios.put('/api/admin/params', { items });
+      message.success('参数已保存');
+    } catch {
+      message.error('保存参数失败');
+    }
+  };
+
+  // logs Tab：GET /api/admin/logs 分页（page/page_size），type 为 action 前缀过滤
+  const [logs, setLogs] = useState<AdminLog[]>([]);
+  const [logPage, setLogPage] = useState(1);
+  const [logPageSize, setLogPageSize] = useState(10);
+  const [logTotal, setLogTotal] = useState(0);
+  const [logType, setLogType] = useState('');
+
+  useEffect(() => {
+    refreshUsers();
+    getClasses({ page: 1, page_size: 100 })
+      .then((res) => {
+        setClasses(res.data.items || []);
+        setClassesTotal(typeof res.data.total === 'number' ? res.data.total : (res.data.items || []).length);
+      })
+      .catch(() => {});
+    loadParams();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const params: Record<string, unknown> = { page: logPage, page_size: logPageSize };
+    if (logType) params.type = logType;
+    axios
+      .get('/api/admin/logs', { params })
+      .then((res: unknown) => {
+        const d = (res as ApiResponse<Paginated<AdminLog>>)?.data;
+        setLogs(d?.items ?? []);
+        setLogTotal(d?.total ?? 0);
+      })
+      .catch(() => message.error('获取操作日志失败'));
+  }, [logPage, logPageSize, logType, message]);
+
+  const filteredUsers = useMemo(() => {
+    const k = kw.trim().toLowerCase();
+    return users.filter((u) => {
+      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+      if (stateFilter !== 'all') {
+        const st = u.is_active ? '正常' : '停用';
+        if (st !== stateFilter) return false;
+      }
+      if (k && `${u.name}${u.username}`.toLowerCase().indexOf(k) < 0) return false;
+      return true;
+    });
+  }, [users, kw, roleFilter, stateFilter]);
+
+  const classNameOf = (u: User) =>
+    u.class_id ? classes.find((c) => c.id === u.class_id)?.name ?? String(u.class_id) : '—';
+
+  // roles Tab：只读矩阵（后端仅 student/teacher/admin 三角色，无权限矩阵接口）
+  const [perms] = useState(PERM_DEFAULT);
+
+  const handleImportFile = async (file: File) => {
+    setImporting(true);
+    try {
+      const res = (await importUsersFile(file)) as unknown as {
+        code?: number;
+        data?: { errors?: Array<{ row?: number; error?: string }>; imported_count?: number };
+      };
+      // 后端解析失败回 code 400（HTTP 400 通常走 catch；此处防 HTTP 200 夹带 code 400 的误报）
+      if (res?.code !== 200 && res?.code !== 201) {
+        const errs = res?.data?.errors;
+        const rows = Array.isArray(errs) ? errs.map((e) => `第${e.row}行${e.error ?? ''}`).join('；') : '';
+        message.error(rows ? `用户导入失败：${rows}` : '用户导入失败');
+        return;
+      }
+      const n = res?.data?.imported_count ?? 0;
+      const errs = res?.data?.errors;
+      const rows = Array.isArray(errs) ? errs.map((e) => `第${e.row}行${e.error ?? ''}`).join('；') : '';
+      if (rows) {
+        message.error(`成功 ${n}，失败 ${Array.isArray(errs) ? errs.length : 0}：${rows}`);
+      } else {
+        message.success(`用户导入成功，共 ${n} 个`);
+      }
+      refreshUsers();
+    } catch (err: unknown) {
+      // HTTP 400 夹带 errors（如行级解析失败）：复用“第X行”格式透出
+      const errs = (err as { response?: { data?: { data?: { errors?: Array<{ row?: number; error?: string }> } } } })
+        ?.response?.data?.data?.errors;
+      const rows = Array.isArray(errs) ? errs.map((e) => `第${e.row}行${e.error ?? ''}`).join('；') : '';
+      message.error(rows ? `用户导入失败：${rows}` : '用户导入失败');
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const handleResetPassword = async () => {
+    try {
+      const values = await pwdForm.validateFields();
+      if (!pwdUser) return;
+      setPwdSaving(true);
+      try {
+        await resetUserPassword(pwdUser.id, values.new_password);
+        message.success('密码已重置');
+        setPwdUser(null);
+        pwdForm.resetFields();
+      } catch {
+        message.error('重置密码失败');
+      } finally {
+        setPwdSaving(false);
+      }
+    } catch {
+      /* 表单校验未通过，不做处理 */
+    }
+  };
+
   return (
     <div className="mj-admin">
       <section className="page-head">
         <div>
           <h1 className="title-lg">系统管理</h1>
           <p className="page-sub">用户与角色、考试参数、集成与安全、操作日志</p>
-        </div>
-        <div className="toolbar">
-          <span className="meta">最近配置变更：14:52 · 陈静</span>
-          <Button onClick={() => message.info('配置导出为演示按钮')}>导出配置</Button>
         </div>
       </section>
 
@@ -221,7 +366,20 @@ const Admin = () => {
                 ]}
               />
               <div className="grow" />
-              <Button onClick={() => message.info('批量导入为演示按钮')}>批量导入</Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".xlsx"
+                hidden
+                aria-label="选择用户导入文件"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleImportFile(f);
+                }}
+              />
+              <Button loading={importing} onClick={() => fileRef.current?.click()}>
+                批量导入
+              </Button>
               <Button type="primary">
                 <Link to="/users">新建用户</Link>
               </Button>
@@ -260,7 +418,14 @@ const Admin = () => {
                       <Button type="link" size="small">
                         <Link to="/users">编辑</Link>
                       </Button>
-                      <Button type="link" size="small" onClick={() => message.info('重置密码为演示按钮')}>
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={() => {
+                          setPwdUser(u);
+                          pwdForm.resetFields();
+                        }}
+                      >
                         重置密码
                       </Button>
                     </td>
@@ -270,10 +435,37 @@ const Admin = () => {
             </table>
             <p className="meta" style={{ marginTop: 12 }}>
               共 {filteredUsers.length} 位用户，其中停用 {filteredUsers.filter((u) => !u.is_active).length} 位。
+              {usersTotal != null && usersTotal > 100 && <span>仅显示前 100，共 {usersTotal} 条。</span>}
+              {classesTotal != null && classesTotal > 100 && <span>班级仅显示前 100，共 {classesTotal} 条。</span>}
               完整管理前往 <Link className="link" to="/users">用户管理</Link> ·{' '}
               <Link className="link" to="/classes">班级管理</Link> ·{' '}
               <Link className="link" to="/teacher-subjects">教师学科分配</Link>
             </p>
+            <Modal
+              title={pwdUser ? `重置密码（${pwdUser.name}）` : '重置密码'}
+              open={pwdUser != null}
+              confirmLoading={pwdSaving}
+              okText="确定"
+              cancelText="取消"
+              onOk={() => void handleResetPassword()}
+              onCancel={() => {
+                setPwdUser(null);
+                pwdForm.resetFields();
+              }}
+            >
+              <Form form={pwdForm} layout="vertical" preserve={false}>
+                <Form.Item
+                  name="new_password"
+                  label="新密码"
+                  rules={[
+                    { required: true, message: '请输入新密码' },
+                    { min: 6, message: '密码至少6位' },
+                  ]}
+                >
+                  <Input.Password placeholder="至少6位" maxLength={64} />
+                </Form.Item>
+              </Form>
+            </Modal>
           </div>
         )}
 
@@ -281,15 +473,8 @@ const Admin = () => {
           <div className="panel-body">
             <div className="between" style={{ marginBottom: 14 }}>
               <p className="page-sub" style={{ margin: 0 }}>
-                勾选表示该角色拥有对应权限。后端仅 student / teacher / admin 三角色（阅卷教师、教务管理员已合并展示）。
+                后端仅 student / teacher / admin 三角色，该矩阵为只读说明文档，不可编辑。
               </p>
-              <Button
-                type="primary"
-                size="small"
-                onClick={() => message.info('权限已保存（本地演示，后端接口待落地）')}
-              >
-                保存权限
-              </Button>
             </div>
             <table className="matrix">
               <thead>
@@ -317,7 +502,7 @@ const Admin = () => {
                               className="perm"
                               type="checkbox"
                               checked={perms[it]?.[i] ?? false}
-                              onChange={() => togglePerm(it, i)}
+                              disabled
                               aria-label={`${it} ${ROLE_LABEL[['student', 'teacher', 'admin'][i]]}`}
                             />
                           </td>
@@ -380,18 +565,8 @@ const Admin = () => {
               </div>
             </div>
             <div className="row" style={{ justifyContent: 'flex-end', marginTop: 18, gap: 8 }}>
-              <Button
-                onClick={() => {
-                  setDur('120');
-                  setPass('60');
-                  setSave('15');
-                  setGrace('60');
-                  setMaxSwitch('3');
-                }}
-              >
-                恢复默认
-              </Button>
-              <Button type="primary" onClick={() => message.info('参数已保存（本地演示，后端接口待落地）')}>
+              <Button onClick={loadParams}>恢复默认</Button>
+              <Button type="primary" onClick={() => void handleSaveParams()}>
                 保存参数
               </Button>
             </div>
@@ -400,66 +575,9 @@ const Admin = () => {
 
         {tab === 'integrations' && (
           <div className="panel-body">
-            <div className="cols-2">
-              <div className="stack">
-                <div className="panel inner">
-                  <div className="panel-head">
-                    <span className="title-sm">身份与接入</span>
-                    <span className="pill pill-ok">
-                      <i className="pill-dot" />
-                      已连接
-                    </span>
-                  </div>
-                  <div className="panel-body stack-sm" style={{ gap: 12 }}>
-                    <div className="between">
-                      <span style={{ fontSize: 13 }}>统一身份认证（CAS / OAuth2）</span>
-                      <span className="meta">cas.univ.edu.cn</span>
-                    </div>
-                    <div className="between">
-                      <span style={{ fontSize: 13 }}>教务系统学生名册同步</span>
-                      <span className="meta">每日 02:00 · 上次成功 02:00</span>
-                    </div>
-                    <div className="between">
-                      <span style={{ fontSize: 13 }}>LDAP 通讯录</span>
-                      <span className="meta">ldap://dir.univ.edu.cn</span>
-                    </div>
-                    <div className="between">
-                      <span style={{ fontSize: 13 }}>短信通知网关</span>
-                      <span className="pill pill-info">已配置</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="panel inner">
-                  <div className="panel-head">
-                    <span className="title-sm">数据与备份</span>
-                  </div>
-                  <div className="panel-body stack-sm" style={{ gap: 12 }}>
-                    <div className="between">
-                      <span style={{ fontSize: 13 }}>数据库自动备份</span>
-                      <span className="meta">每 6 小时 · 保留 30 天</span>
-                    </div>
-                    <div className="between">
-                      <span style={{ fontSize: 13 }}>最近备份</span>
-                      <span className="meta">2026-09-15 12:00 · 成功</span>
-                    </div>
-                    <div className="between">
-                      <span style={{ fontSize: 13 }}>作答数据留存期</span>
-                      <span className="meta">考试结束后 3 年</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="stack">
-                <div className="title-sm" style={{ marginBottom: 12 }}>
-                  访问与安全策略
-                </div>
-                <div className="banner banner-info">
-                  <span>
-                    当前安全策略评级：<b>符合《教育考试数据安全规范》二级要求</b>。上次合规检查 2026-08-28。
-                  </span>
-                </div>
-              </div>
-            </div>
+            <p className="page-sub" style={{ margin: 0 }}>
+              身份与备份为部署运维项，见部署文档。
+            </p>
           </div>
         )}
 
@@ -469,28 +587,52 @@ const Admin = () => {
               <Select
                 aria-label="日志类型"
                 style={{ width: 170 }}
-                defaultValue="全部类型"
-                options={[{ value: '全部类型', label: '全部类型' }]}
+                value={logType}
+                onChange={(v) => {
+                  setLogType(v);
+                  setLogPage(1);
+                }}
+                options={LOG_TYPE_OPTIONS}
               />
-              <Select
-                aria-label="时间范围"
-                style={{ width: 150 }}
-                defaultValue="最近 24 小时"
-                options={[{ value: '最近 24 小时', label: '最近 24 小时' }]}
-              />
-              <div className="grow" />
-              <Button onClick={() => message.info('日志导出为演示按钮')}>导出日志</Button>
             </div>
-            <div className="feed">
-              {MOCK_LOGS.map((l) => (
-                <div className="feed-item" key={l.t}>
-                  <span className={`feed-ico ico-${l.k}`}>{l.ic}</span>
-                  <div>
-                    <div className="feed-t">{l.t}</div>
-                    <div className="feed-m">{l.m}</div>
-                  </div>
-                </div>
-              ))}
+            {logs.length === 0 ? (
+              <p className="meta">暂无操作日志。</p>
+            ) : (
+              <table className="ds-table">
+                <thead>
+                  <tr>
+                    <th>操作</th>
+                    <th>操作人</th>
+                    <th>IP</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((l) => (
+                    <tr key={l.id}>
+                      <td>
+                        <span className="cell-strong">{l.action}</span>
+                      </td>
+                      <td className="num">{l.actor_id ?? '—'}</td>
+                      <td className="num">{l.ip ?? '—'}</td>
+                      <td className="num">{l.created_at}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+              <Pagination
+                current={logPage}
+                pageSize={logPageSize}
+                total={logTotal}
+                showSizeChanger
+                showTotal={(t: number) => `共 ${t} 条`}
+                onChange={(p: number, ps: number) => {
+                  setLogPage(p);
+                  setLogPageSize(ps);
+                }}
+              />
             </div>
           </div>
         )}
