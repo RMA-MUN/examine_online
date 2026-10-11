@@ -27,12 +27,12 @@ const EVENT_LABEL: Record<string, string> = {
   blur: '失焦',
   fullscreen_exit: '退出全屏',
   paste: '粘贴',
-  face_lost: '人脸丢失',
   announcement: '全屏公告',
 };
 
-// 切屏 / 人脸丢失属于高权重风险信号，其余事件只进告警 feed，不计入风险推导
-const RISK_EVENT_TYPES = new Set(['switch', 'face_lost']);
+// 切屏属于高权重风险信号，其余事件只进告警 feed，不计入风险推导
+// （face_lost 需摄像头基础设施，暂无产生端，后端枚举保留但界面不再展示）
+const RISK_EVENT_TYPES = new Set(['switch']);
 
 type RiskLevel = '高风险' | '中风险' | '正常';
 
@@ -146,7 +146,7 @@ const Proctoring = () => {
     return map;
   }, [events]);
 
-  // 监控墙：记录 × 事件聚合，风险由切屏/人脸丢失事件数推导（≥3 高风险，1–2 中风险）
+  // 监控墙：记录 × 事件聚合，风险由切屏事件数推导（≥3 高风险，1–2 中风险）
   const wall = useMemo<WallStudent[]>(
     () =>
       records.map((r) => {
@@ -175,7 +175,7 @@ const Proctoring = () => {
     () =>
       events.map((e) => ({
         id: e.id,
-        k: e.event_type === 'face_lost' || e.event_type === 'switch' ? 'danger' : 'warn',
+        k: e.event_type === 'switch' ? 'danger' : 'warn',
         n: EVENT_LABEL[e.event_type] ?? e.event_type,
         m: `记录 #${e.record_id} · ${e.created_at}${e.handled_action === 'warn' ? ' · 已警告' : e.handled_action === 'normal' ? ' · 已标正常' : ''}`,
       })),
@@ -222,7 +222,7 @@ const Proctoring = () => {
     if (recordEvents == null || recordEvents.length === 0) return [];
     return recordEvents.map((e) => ({
       id: e.id,
-      k: (e.event_type === 'face_lost' || e.event_type === 'switch' ? 'danger' : 'warn') as
+      k: (e.event_type === 'switch' ? 'danger' : 'warn') as
         | 'danger'
         | 'warn'
         | 'ok',
@@ -360,7 +360,7 @@ const Proctoring = () => {
       {highRiskCount > 0 && (
         <section className="banner banner-warn">
           <span>
-            <b>{highRiskCount} 名考生</b> 触发高风险告警（切屏 / 人脸丢失事件≥3 次），建议立即人工复核。
+            <b>{highRiskCount} 名考生</b> 触发高风险告警（切屏事件≥3 次），建议立即人工复核。
           </span>
         </section>
       )}
@@ -419,21 +419,21 @@ const Proctoring = () => {
                   <i className="pill-dot" />
                   高风险
                 </span>
-                <span className="legend-text">切屏 / 人脸丢失事件≥3</span>
+                <span className="legend-text">切屏事件≥3</span>
               </div>
               <div className="row">
                 <span className="pill pill-warn">
                   <i className="pill-dot" />
                   中风险
                 </span>
-                <span className="legend-text">切屏 / 人脸丢失事件 1–2</span>
+                <span className="legend-text">切屏事件 1–2</span>
               </div>
               <div className="row">
                 <span className="pill pill-ok">
                   <i className="pill-dot" />
                   正常
                 </span>
-                <span className="legend-text">无切屏 / 人脸丢失事件</span>
+                <span className="legend-text">无切屏事件</span>
               </div>
             </div>
           </div>
@@ -515,7 +515,7 @@ const Proctoring = () => {
               />
             )}
             <p className="meta wall-note">
-              暂无视频流，列表为事件聚合。风险由切屏 / 人脸丢失事件数推导（≥3 高风险，1–2 中风险）。
+              暂无视频流，列表为事件聚合。风险由切屏事件数推导（≥3 高风险，1–2 中风险）。
             </p>
           </div>
         </div>
@@ -606,7 +606,7 @@ const Proctoring = () => {
         {selected && (
           <div className="drawer-stack">
             <p className="meta">
-              考生 #{selected.studentId} · 风险等级 {selected.risk}（由切屏 / 人脸丢失事件数推导）
+              考生 #{selected.studentId} · 风险等级 {selected.risk}（由切屏事件数推导）
               {selectedKey != null && warnedIds.includes(selectedKey) && ' · 已警告'}
               {selectedKey != null && normalIds.includes(selectedKey) && ' · 已标记正常'}
             </p>

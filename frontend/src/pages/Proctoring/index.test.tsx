@@ -93,7 +93,7 @@ it('空事件流渲染 EmptyState 而非演示占位', async () => {
   unmount();
 });
 
-it('风险由切屏/人脸丢失事件数推导 + KPI 映射真实记录', async () => {
+it('风险由切屏事件数推导 + KPI 映射真实记录', async () => {
   vi.mocked(getExams).mockResolvedValueOnce({ data: { items: [examItem] } } as never);
   const { getExamRecords } = await import('../../api/grading');
   vi.mocked(getExamRecords).mockResolvedValueOnce({
@@ -107,12 +107,12 @@ it('风险由切屏/人脸丢失事件数推导 + KPI 映射真实记录', async
     if (url === '/api/exams/7/events') {
       return {
         data: {
-          // 记录 101：3 次切屏 → 高风险；记录 102：1 次人脸丢失 → 中风险（blur 不计入风险）
+          // 记录 101：3 次切屏 → 高风险；记录 102：1 次切屏 → 中风险（blur 不计入风险）
           items: [
             mkEvent(1, 101, 'switch'),
             mkEvent(2, 101, 'switch'),
             mkEvent(3, 101, 'switch'),
-            mkEvent(4, 102, 'face_lost'),
+            mkEvent(4, 102, 'switch'),
             mkEvent(5, 102, 'blur'),
           ],
           total: 5,
@@ -132,7 +132,7 @@ it('风险由切屏/人脸丢失事件数推导 + KPI 映射真实记录', async
   expect(screen.getByText('高风险 · 3 次')).toBeInTheDocument();
   expect(screen.getAllByText('中风险').length).toBeGreaterThan(0);
   // 推导口径文案
-  expect(screen.getByText(/风险由切屏 \/ 人脸丢失事件数推导/)).toBeInTheDocument();
+  expect(screen.getByText(/风险由切屏事件数推导/)).toBeInTheDocument();
   expect(screen.getByText(/暂无视频流，列表为事件聚合/)).toBeInTheDocument();
   // KPI：记录数 / 事件数 / 已交卷数均来自真实接口（banner 文本跨元素，用 textContent 断言）
   await waitFor(() => {
