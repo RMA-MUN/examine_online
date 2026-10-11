@@ -21,6 +21,7 @@ from app.api.monitor import router as monitor_router
 from app.api.statistics import router as statistics_router
 from app.api.admin_classes import router as admin_classes_router
 from app.api.admin_teacher_subjects import router as admin_teacher_subjects_router
+from app.api.admin_system import router as admin_system_router
 from app.workers.ai_grading_worker import ai_grading_workers
 
 """FastAPI 应用入口：创建应用实例、注册路由与中间件，并随服务生命周期启停 AI 评分 worker。"""
@@ -43,10 +44,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="在线考试系统", version="1.0.0", lifespan=lifespan)
 
-# 仅允许前端开发服务器跨域访问；使用凭证模式时来源必须显式列出，不能写成 "*"
+# 允许的前端来源可经 CORS_ORIGINS 环境变量配置（逗号分隔），默认仅本地开发服务器；使用凭证模式时来源必须显式列出，不能写成 "*"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -63,6 +64,7 @@ app.include_router(monitor_router)
 app.include_router(statistics_router)
 app.include_router(admin_classes_router)
 app.include_router(admin_teacher_subjects_router)
+app.include_router(admin_system_router)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

@@ -14,7 +14,7 @@ from app.models.exam_record import ExamRecord
 from app.models.question import Question
 from app.models.user import User
 
-# 分数段与前端 Analytics mock（bins ل）对齐：标签用 en-dash。
+# 分数段标签与前端 Analytics 页面对齐：标签用 en-dash。
 SCORE_BINS: list[tuple[str, int, int]] = [
     ("0–39", 0, 40),
     ("40–49", 40, 50),
@@ -99,8 +99,12 @@ async def get_exam_student_scores(
         .join(User, User.id == ExamRecord.student_id)
         .where(ExamRecord.exam_id == exam_id)
     )
-    if class_id is not None:
-        query = query.where(User.class_id == class_id)
+    # class_id=-1 表示「未分班」（User.class_id IS NULL），与 user_service 的筛选口径一致
+    if class_id is not None and class_id != 0:
+        if class_id == -1:
+            query = query.where(User.class_id.is_(None))
+        else:
+            query = query.where(User.class_id == class_id)
     if keyword:
         like = f"%{keyword}%"
         query = query.where(or_(User.name.ilike(like), User.username.ilike(like)))
@@ -187,7 +191,7 @@ async def get_class_compare(db: AsyncSession, exam_id: int) -> list[dict]:
 
 
 async def get_score_bins(db: AsyncSession, exam_id: int) -> list[dict]:
-    """分数段分布（固定 7 段，与前端 Analytics mock 标签对齐）：[{"label", "count"}]。"""
+    """分数段分布（固定 7 段，与前端 Analytics 页面标签对齐）：[{"label", "count"}]。"""
     result = await db.execute(select(ExamRecord.score).where(ExamRecord.exam_id == exam_id))
     scores = [s if s is not None else 0 for s in result.scalars().all()]
     return [

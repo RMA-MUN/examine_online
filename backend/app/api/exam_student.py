@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.exam_record import ExamRecord
 from app.models.user import User
+from app.redis_client import redis_client
 from app.services.exam_student_service import start_exam, get_paper, save_answers, submit_exam, get_my_records
 from app.services.anti_cheat_service import record_switch, get_switch_status
 from app.services.teacher_subject_service import can_teacher_manage_exam
@@ -51,12 +52,19 @@ async def get_paper_action(
 @router.post("/api/exams/{exam_id}/save")
 async def save_answers_action(
     exam_id: int,
-    answers: dict,
+    payload: dict,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["student"]))
 ):
-    """暂存当前学生的答题内容（草稿保存），仅学生可调用。"""
-    success, error = await save_answers(db, exam_id, current_user.id, answers)
+    """暂存当前学生的答题内容与标记题目（草稿保存），仅学生可调用。
+
+    body 形如 {"answers": {...}, "marked": [题目ID]}；兼容旧的裸 answers dict。
+    """
+    answers = payload.get("answers")
+    if not isinstance(answers, dict):
+        answers = payload
+    marked = payload.get("marked")
+    success, error = await save_answers(db, exam_id, current_user.id, answers, marked)
     if not success:
         return error_response(message=error)
     return success_response(message="保存成功")
@@ -95,6 +103,9 @@ async def force_submit_action(
         record.submit_time = datetime.now()
         await db.commit()
         await db.refresh(record)
+        # 与 submit_exam 对齐清理暂存缓存，避免学生端拿到与已交卷状态不一致的旧试卷/草稿
+        await redis_client.delete(f"exam:paper:{record.exam_id}:{record.student_id}")
+        await redis_client.delete(f"exam:autosave:{record.exam_id}:{record.student_id}")
     return success_response(data={
         "record_id": record.id,
         "exam_id": record.exam_id,

@@ -9,6 +9,7 @@ from app.database import get_db
 from app.redis_client import redis_client
 from app.schemas.user import LoginRequest, TokenResponse, UserResponse, ProfileUpdate, ChangePasswordRequest
 from app.services.auth_service import authenticate_user, create_token, logout_user, change_password
+from app.services.audit_service import log_action
 from app.services.user_service import update_user
 from app.utils.deps import get_current_user, security
 from app.utils.response import success_response, error_response
@@ -39,6 +40,8 @@ async def login(
         logger.warning("登录限流检查失败（Redis 不可用），放行")
         locked = None
     if locked:
+        await log_action(db, actor_id=None, action="auth.login_locked", ip=client_ip,
+                         detail={"username": request.username})
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="尝试次数过多，请 10 分钟后重试",

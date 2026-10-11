@@ -215,15 +215,26 @@ async def get_paper(db: AsyncSession, exam_id: int, student_id: int):
     )
     answers = result.scalars().all()
     saved_answers = {a.question_id: a.student_answer for a in answers}
-    
+
+    # 多选题入库为 "AB" 字符串，回显时拆回数组供前端 Checkbox.Group 使用；
+    # 仅此返回路径拆分，存储与阅卷链路仍消费字符串
+    for q_id, q in questions_map.items():
+        if q.type == "multiple" and isinstance(saved_answers.get(q_id), str):
+            saved_answers[q_id] = list(saved_answers[q_id]) if saved_answers[q_id] else []
+
+    # 考试记录（缓存命中路径未查过记录）——回传标记题目供作答页恢复
+    record = await db.get(ExamRecord, record_id)
+    marked = list(record.marked_question_ids) if record and record.marked_question_ids else []
+
     return {
         "record_id": record_id,
         "questions": ordered_questions,
-        "saved_answers": saved_answers
+        "saved_answers": saved_answers,
+        "marked_question_ids": marked
     }, None
 
-async def save_answers(db: AsyncSession, exam_id: int, student_id: int, answers: dict):
-    """自动保存作答：写入 Redis 暂存，供断线重连/交卷时恢复。
+async def save_answers(db: AsyncSession, exam_id: int, student_id: int, answers: dict, marked: list = None):
+    """自动保存作答：答案写入 Redis 暂存，标记题目写入记录列（供刷新/换端恢复）。
 
     :return: 元组 (是否成功, 错误信息或 None)
     """
@@ -250,7 +261,15 @@ async def save_answers(db: AsyncSession, exam_id: int, student_id: int, answers:
         json.dumps(answers),
         ex=3600
     )
-    
+
+    # 标记题目随保存持久化：请求体未携带或格式异常时清空，保证列内容始终是 int 列表
+    if isinstance(marked, list):
+        record.marked_question_ids = [q for q in marked if isinstance(q, int)]
+    else:
+        record.marked_question_ids = []
+
+    await db.commit()
+
     return True, None
 
 async def submit_exam(db: AsyncSession, exam_id: int, student_id: int, submitted_answers: dict = None):

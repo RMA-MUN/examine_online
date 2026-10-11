@@ -32,3 +32,14 @@ export const updateUser = (id: number, data: UserUpdateInput): Promise<ApiRespon
 
 export const deleteUser = (id: number): Promise<ApiResponse<null>> =>
   axios.delete(`/api/users/${id}`) as Promise<ApiResponse<null>>;
+
+export const importUsersFile = (file: File): Promise<ApiResponse<{ imported_count: number; errors: Array<{ row?: number; error?: string }> }>> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return axios.post('/api/users/import-file', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }) as Promise<ApiResponse<{ imported_count: number; errors: Array<{ row?: number; error?: string }> }>>;
+};
+
+export const resetUserPassword = (id: number, new_password: string): Promise<ApiResponse<null>> =>
+  axios.post(`/api/users/${id}/reset-password`, { new_password }) as Promise<ApiResponse<null>>;

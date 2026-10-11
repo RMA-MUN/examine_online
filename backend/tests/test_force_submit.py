@@ -5,6 +5,7 @@ TDD RED：被测端点 POST /api/records/{record_id}/force-submit 尚未实现�
 """
 
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -19,6 +20,14 @@ from app.models.exam_record import ExamRecord
 from app.models.user import User
 from app.services.teacher_subject_service import assign_subject_to_teacher
 from app.utils.security import create_access_token
+
+
+@pytest.fixture(autouse=True)
+def _mock_force_submit_redis(monkeypatch):
+    """强交端点交卷后会清理 Redis 暂存键；测试环境无真实 Redis，统一 mock 掉。"""
+    import app.api.exam_student as exam_student_api
+
+    monkeypatch.setattr(exam_student_api, "redis_client", AsyncMock(), raising=False)
 
 
 @pytest_asyncio.fixture

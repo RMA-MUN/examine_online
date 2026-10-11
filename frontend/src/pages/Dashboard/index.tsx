@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { App, Row, Col, Button, Modal, Select, Space, Form, Input, InputNumber, Checkbox } from 'antd';
+import { App, Row, Col, Button, Modal, Select, Space, Form, Input, InputNumber } from 'antd';
 import {
   FileTextOutlined,
   CheckCircleOutlined,
@@ -187,7 +187,7 @@ const Dashboard = () => {
       const values = await examForm.validateFields();
       setNewExamOpen(false);
       examForm.resetFields();
-      // 表单值随路由透传，复用现有 ExamEdit（/exams/new）继续组卷
+      // 表单值随路由透传，复用现有 ExamEdit（/exams/new）继续组卷（ExamEdit 会读取并回填）
       navigate('/exams/new', { state: values });
     } catch {
       /* 校验失败时 inline 提示即可，不关窗 */
@@ -223,7 +223,7 @@ const Dashboard = () => {
       key: 'teacher-grading',
       no: '模块 02',
       title: '教师阅卷端',
-      desc: '按题或按人流转，评分点逐项勾选、评语模板、双评与仲裁复核。',
+      desc: '按题或按人流转，评分点逐项勾选、评语模板、人工复核。',
       foot: `待阅 ${kpi.pending} 份`,
       icon: <AuditOutlined />,
       route: '/grading',
@@ -271,10 +271,9 @@ const Dashboard = () => {
       <section className="page-head">
         <div>
           <h1 className="title-lg">考试运行总览</h1>
-          <p className="page-sub">教务处 · 第 3 教学周{user?.name || user?.username ? ` · 你好，${user?.name || user?.username}` : ''}</p>
+          <p className="page-sub">{user?.name || user?.username ? `你好，${user?.name || user?.username}` : '欢迎回来'}</p>
         </div>
         <div className="toolbar">
-          <span className="meta">实时快照</span>
           {!isStudent && (
             <Button
               icon={<FileExcelOutlined />}
@@ -464,12 +463,8 @@ const Dashboard = () => {
           layout="vertical"
           preserve={false}
           initialValues={{
-            subject: '数据结构与算法',
-            mode: '闭卷机考',
             duration: 120,
             total: 100,
-            camera: true,
-            double: false,
           }}
         >
           <Form.Item
@@ -479,31 +474,6 @@ const Dashboard = () => {
           >
             <Input placeholder="例：《数据结构与算法》期末考试" />
           </Form.Item>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item label="科目" name="subject">
-                <Select
-                  options={[
-                    { value: '数据结构与算法', label: '数据结构与算法' },
-                    { value: '大学英语（三）', label: '大学英语（三）' },
-                    { value: '线性代数', label: '线性代数' },
-                    { value: '计算机网络', label: '计算机网络' },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="考试方式" name="mode">
-                <Select
-                  options={[
-                    { value: '闭卷机考', label: '闭卷机考' },
-                    { value: '开卷机考', label: '开卷机考' },
-                    { value: '随堂测验', label: '随堂测验' },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item label="考试时长（分钟）" name="duration">
@@ -516,12 +486,6 @@ const Dashboard = () => {
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item name="camera" valuePropName="checked" style={{ marginBottom: 8 }}>
-            <Checkbox>启用摄像头监考与切屏记录</Checkbox>
-          </Form.Item>
-          <Form.Item name="double" valuePropName="checked" style={{ marginBottom: 0 }}>
-            <Checkbox>启用主观题双评（差异超 10% 触发仲裁）</Checkbox>
-          </Form.Item>
         </Form>
       </Modal>
       <Modal

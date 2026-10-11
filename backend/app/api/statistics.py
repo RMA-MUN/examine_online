@@ -115,7 +115,7 @@ async def get_exam_student_scores(
     exam_id: int,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
-    class_id: int | None = Query(default=None),
+    class_id: int | None = Query(default=None, ge=-1, description="班级筛选，-1 表示未分班（class_id 为空）"),
     keyword: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["teacher", "admin"]))

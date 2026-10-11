@@ -1,6 +1,6 @@
 """用户相关的请求/响应 Pydantic 模型。"""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
 
@@ -55,3 +55,9 @@ class ChangePasswordRequest(BaseModel):
     """修改密码请求体。"""
     old_password: str
     new_password: str
+
+
+class ResetPasswordRequest(BaseModel):
+    """管理员重置他人密码请求体。"""
+
+    new_password: str = Field(min_length=6)

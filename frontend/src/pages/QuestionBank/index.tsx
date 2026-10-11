@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { App, Button, Input, Modal, Select } from 'antd';
+import { App, Button, Col, Divider, Form, Input, InputNumber, Modal, Row, Select } from 'antd';
+import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import axios from '../../api/axios';
 import { generatePaperFromBasket, getExams, importBankFile } from '../../api/exams';
 import type { ApiResponse, Paginated } from '../../types/api';
 import {
   BANK_BLUEPRINT,
-  LEVEL_ORDER,
-  MOCK_BANK_META,
   MOCK_BANK_QUESTIONS,
   autoPickLeastUsed,
   type BankLevel,
@@ -15,7 +14,6 @@ import {
 } from '../../mocks/bank';
 import './index.css';
 
-type SortKey = 'used' | 'hard' | 'rate';
 type SegType = 'all' | BankType;
 
 const SEG_TYPES: SegType[] = ['all', '单选', '多选', '判断', '填空', '简答'];
@@ -34,6 +32,20 @@ const DIFFICULTY_TO_CN: Record<string, BankLevel> = {
   hard: '难',
 };
 
+const TYPE_OPTIONS = [
+  { value: 'single', label: '单选' },
+  { value: 'multiple', label: '多选' },
+  { value: 'judge', label: '判断' },
+  { value: 'blank', label: '填空' },
+  { value: 'essay', label: '简答' },
+];
+
+const DIFFICULTY_OPTIONS = [
+  { value: 'easy', label: '易' },
+  { value: 'medium', label: '中' },
+  { value: 'hard', label: '难' },
+];
+
 interface BankApiItem {
   id: number;
   type: string;
@@ -44,6 +56,17 @@ interface BankApiItem {
   course_id: number | null;
   tags: string[] | null;
   difficulty: string | null;
+}
+
+interface BankFormValues {
+  type: string;
+  content: string;
+  options?: string[];
+  answer?: string;
+  score: number;
+  course_id?: number | null;
+  tags?: string[];
+  difficulty?: string;
 }
 
 function mapApiToMock(items: BankApiItem[]): MockBankQuestion[] {
@@ -67,28 +90,62 @@ function uniq<T>(arr: T[]): T[] {
   return Array.from(new Set(arr));
 }
 
+const optionLetters = (index: number) => String.fromCharCode(65 + index);
+
+const parseBankNumericId = (id: string): number | null => {
+  const m = /^B-(\d+)$/.exec(id);
+  return m ? Number(m[1]) : null;
+};
+
 const QuestionBank = () => {
   const { message } = App.useApp();
   // 无后端时读 mocks/bank.ts；后端可用时以接口数据覆盖
   const [remote, setRemote] = useState<MockBankQuestion[]>([]);
-  const questions = useMemo(() => (remote.length > 0 ? remote : MOCK_BANK_QUESTIONS), [remote]);
+  const [rawItems, setRawItems] = useState<BankApiItem[]>([]);
+  // 拉取状态：pending（首屏加载中）→ ok（后端可达，以接口数据为准，空即空）
+  //   / unreachable（后端不可用，回退 mocks 演示数据）。
+  // 注意 real items 的 used 全为 mapApiToMock 硬编码 0，least-used 实为退化取前 N，
+  // 故 toast 不再宣称算法（见 handleAuto）。
+  const [bankStatus, setBankStatus] = useState<'pending' | 'ok' | 'unreachable'>('pending');
+  // 后端 list_bank 返回的 total（paginated_response），用于替换 MOCK_BANK_META 假统计
+  const [total, setTotal] = useState<number | null>(null);
+  // 真实空题库（ok + total 0）渲染 EmptyState，不再回退到 12 条 mocks 假数据；
+  // mocks 仅在后端不可达（unreachable）时作为离线演示回退。pending（首轮加载中）同样
+  // 不展示 mocks，避免把演示数据误认为真实题库。
+  const questions = useMemo(
+    () => (remote.length > 0 ? remote : bankStatus === 'unreachable' ? MOCK_BANK_QUESTIONS : []),
+    [remote, bankStatus],
+  );
+  // 筛选映射（client-side over fetched real fields）：
+  // - sub → course_id（展示为 `课程 {id}` / 公共题库）
+  // - type → type（single/multiple/judge/blank/essay ↔ 单选/多选/判断/填空/简答）
+  // - level → difficulty（easy/medium/hard ↔ 易/中/难）
+  // - know → tags[0]（后端 tags 无独立查询参数，前端对已拉取页做诚实过滤）
+  // - kw → content/tags/id（后端 ?keyword= 仅匹配 content，见 question_service.list_bank_questions；
+  //   前端在已拉取页内额外匹配 know/id 以兼容题号搜索，不虚构服务端能力）
+  // 已删除 reviewedOnly：后端 QuestionResponse 无 reviewed 字段。
   const [sub, setSub] = useState('all');
   const [type, setType] = useState<SegType>('all');
   const [level, setLevel] = useState('all');
   const [know, setKnow] = useState('all');
-  const [reviewedOnly, setReviewedOnly] = useState(true);
   const [kw, setKw] = useState('');
-  const [sort, setSort] = useState<SortKey>('used');
+  // 排序：后端 list_bank 无 sort 参数，固定 order_by id desc（question_service.py）；
+  // 前端不再提供按正确率/使用次数排序（p/used 为 mocks/bank.ts 演示字段，后端无此列），
+  // 保持接口返回顺序（单一日序），故删除排序 Select。
   const [basket, setBasket] = useState<Record<string, number>>({});
   const [genOpen, setGenOpen] = useState(false);
-  const [paperName, setPaperName] = useState('《数据结构与算法》期中考试（B 卷）');
-  const [duration, setDuration] = useState('120');
-  const [publishClass, setPublishClass] = useState('计科 2401');
   const [examOptions, setExamOptions] = useState<Array<{ value: number; label: string }>>([]);
   const [targetExamId, setTargetExamId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [qModalOpen, setQModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [qSubmitting, setQSubmitting] = useState(false);
+  const [qForm] = Form.useForm<BankFormValues>();
+  const qType = Form.useWatch('type', qForm);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const rawById = useMemo(() => new Map(rawItems.map((q) => [q.id, q])), [rawItems]);
 
   const refreshBank = async () => {
     try {
@@ -96,11 +153,20 @@ const QuestionBank = () => {
         params: { page: 1, page_size: 100 },
       })) as ApiResponse<Paginated<BankApiItem>>;
       const data = res?.data;
-      if (data && Array.isArray(data.items) && data.items.length > 0) {
-        setRemote(mapApiToMock(data.items));
+      if (data && Array.isArray(data.items)) {
+        setTotal(typeof data.total === 'number' ? data.total : data.items.length);
+        if (data.items.length > 0) {
+          setRawItems(data.items);
+          setRemote(mapApiToMock(data.items));
+        } else {
+          setRawItems([]);
+          setRemote([]);
+        }
+        setBankStatus('ok');
       }
     } catch {
-      // 后端不可用时静默回退到 mocks 演示数据
+      // 后端不可用时回退到 mocks 演示数据（唯一展示 mocks 的情形）
+      setBankStatus('unreachable');
     }
   };
 
@@ -122,6 +188,90 @@ const QuestionBank = () => {
         // 后端不可用时保持空下拉，落盘时给出离线占位提示
       });
   }, [genOpen, examOptions.length]);
+
+  const openCreateModal = () => {
+    setEditingId(null);
+    qForm.resetFields();
+    qForm.setFieldsValue({
+      type: 'single',
+      score: 5,
+      options: ['', '', '', ''],
+      difficulty: 'medium',
+      tags: [],
+      course_id: null,
+    });
+    setQModalOpen(true);
+  };
+
+  const openEditModal = (q: MockBankQuestion) => {
+    const numericId = parseBankNumericId(q.id);
+    if (numericId == null) {
+      message.info('当前题目无法编辑（请先导入题库）');
+      return;
+    }
+    const raw = rawById.get(numericId);
+    if (!raw) {
+      message.info('当前题目无法编辑（请先导入题库）');
+      return;
+    }
+    setEditingId(q.id);
+    qForm.resetFields();
+    qForm.setFieldsValue({
+      type: raw.type,
+      content: raw.content,
+      options: Array.isArray(raw.options) ? raw.options : [],
+      answer: raw.answer ?? '',
+      score: raw.score ?? 5,
+      course_id: raw.course_id,
+      tags: raw.tags ?? [],
+      difficulty: raw.difficulty ?? 'medium',
+    });
+    setQModalOpen(true);
+  };
+
+  const handleQuestionSubmit = async () => {
+    try {
+      const values = await qForm.validateFields();
+      setQSubmitting(true);
+      // BankQuestionCreate（schemas/question.py）必填仅 type/content；其余缺省：
+      // score=1、options/answer/course_id/tags/difficulty 可空；difficulty 仅 easy/medium/hard。
+      const payload = {
+        type: values.type,
+        content: values.content?.trim(),
+        options: ['single', 'multiple'].includes(values.type) ? (values.options || []) : null,
+        answer: values.answer || null,
+        score: values.score,
+        course_id: values.course_id ?? null,
+        tags: values.tags && values.tags.length > 0 ? values.tags : null,
+        difficulty: values.difficulty || null,
+      };
+      if (editingId == null) {
+        await axios.post('/api/bank/questions', payload);
+        message.success('新建题目成功');
+      } else {
+        const numericId = parseBankNumericId(editingId);
+        if (numericId == null) {
+          message.info('当前题目无法编辑（请先导入题库）');
+          return;
+        }
+        await axios.put(`/api/questions/${numericId}`, payload);
+        message.success('更新题目成功');
+      }
+      setQModalOpen(false);
+      await refreshBank();
+    } catch (err: unknown) {
+      // validateFields 失败时 err 含 errorFields，不弹错；仅处理 HTTP 错误
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 403) {
+        message.error('无权管理该学科题库');
+        return;
+      }
+      if ((err as { errorFields?: unknown })?.errorFields) return;
+      message.error(editingId == null ? '新建题目失败' : '更新题目失败');
+    } finally {
+      setQSubmitting(false);
+    }
+  };
 
   const handleImportFile = async (file: File) => {
     setUploading(true);
@@ -154,7 +304,7 @@ const QuestionBank = () => {
 
   const handleGenerate = async () => {
     if (targetExamId == null) {
-      message.warning('暂无可选考试（后端不可用），仅演示占位');
+      message.warning('暂无可选考试，后端不可用，功能暂不可用');
       return;
     }
     const numericIds = basketIds
@@ -162,7 +312,7 @@ const QuestionBank = () => {
       .filter((v): v is string => v != null)
       .map(Number);
     if (numericIds.length === 0) {
-      message.info('当前篮内为演示占位题，无法落盘（请先导入题库）');
+      message.info('当前题目无法落盘（请先导入题库）');
       return;
     }
     setGenerating(true);
@@ -186,15 +336,11 @@ const QuestionBank = () => {
       if (sub !== 'all' && q.sub !== sub) return false;
       if (level !== 'all' && q.level !== level) return false;
       if (know !== 'all' && q.know !== know) return false;
-      if (reviewedOnly && !q.reviewed) return false;
       if (kw && `${q.stem}${q.know}${q.id}`.toLowerCase().indexOf(kw.toLowerCase()) < 0) return false;
       return true;
     });
-    if (sort === 'used') out.sort((a, b) => b.used - a.used);
-    if (sort === 'hard') out.sort((a, b) => LEVEL_ORDER[b.level] - LEVEL_ORDER[a.level] || a.p - b.p);
-    if (sort === 'rate') out.sort((a, b) => a.p - b.p);
     return out;
-  }, [questions, type, sub, level, know, reviewedOnly, kw, sort]);
+  }, [questions, type, sub, level, know, kw]);
 
   const basketIds = Object.keys(basket);
   const basketCount = basketIds.reduce((n, id) => n + basket[id], 0);
@@ -223,7 +369,7 @@ const QuestionBank = () => {
       });
       return next;
     });
-    message.success(`智能抽题完成，共 ${picked.length} 题（least-used）`);
+    message.success(`智能抽题完成，共 ${picked.length} 题`);
   };
 
   const clearFilters = () => {
@@ -263,6 +409,10 @@ const QuestionBank = () => {
 
   const levelPill = (l: BankLevel) => (l === '难' ? 'pill-danger' : l === '中' ? 'pill-warn' : 'pill-ok');
 
+  // 头部统计：subjects 个数无任何端点可提供（list_bank 仅回 total），故删除该分句与 MOCK 更新时间；
+  // 显示 total ?? 当前页题数（离线回退 mocks 时为 mocks 长度，不虚构 4268）。
+  const headerTotal = total ?? questions.length;
+
   return (
     <div className="mj-bank">
       <div className="bank-topbar">
@@ -289,8 +439,7 @@ const QuestionBank = () => {
         <Button loading={uploading} onClick={() => fileRef.current?.click()}>
           导入题库
         </Button>
-        {/* 新建题目表单待对接 POST /api/bank/questions，当前禁用待接入 */}
-        <Button type="primary" disabled title="P2 待接入：新建题目表单待对接 POST /api/bank/questions">
+        <Button type="primary" onClick={openCreateModal}>
           新建题目
         </Button>
       </div>
@@ -299,27 +448,8 @@ const QuestionBank = () => {
         <div>
           <h1 className="title-lg">题库与组卷</h1>
           <p className="page-sub">
-            题库共 <span className="num">{MOCK_BANK_META.total}</span> 道题 · 覆盖{' '}
-            <span className="num">{MOCK_BANK_META.subjects}</span> 个学科 · 最近更新 {MOCK_BANK_META.updated}
-            {remote.length > 0 && <span className="meta">（已连接后端题库：{remote.length} 题）</span>}
+            题库共 <span className="num">{headerTotal}</span> 道题
           </p>
-        </div>
-        <div className="toolbar">
-          <span className="pill pill-neutral" title="P2 不做：查重服务未接入，仅演示占位">
-            <i className="pill-dot" />
-            题目查重（演示）
-          </span>
-          <Select
-            aria-label="排序方式"
-            value={sort}
-            onChange={(v) => setSort(v)}
-            style={{ width: 170 }}
-            options={[
-              { value: 'used', label: '按使用次数' },
-              { value: 'hard', label: '按难度（难→易）' },
-              { value: 'rate', label: '按正确率（低→高）' },
-            ]}
-          />
         </div>
       </section>
 
@@ -337,21 +467,6 @@ const QuestionBank = () => {
           {renderRail('题型', uniq(questions.map((q) => q.type)), type, (v) => setType(v as SegType), '全部题型')}
           {renderRail('难度', ['易', '中', '难'], level, setLevel, '全部难度')}
           {renderRail('知识点', uniq(questions.map((q) => q.know)), know, setKnow, '全部知识点')}
-          <div className="rail-group">
-            <div className="row-wrap">
-              <span className="label" style={{ flex: 1 }}>
-                仅显示已审核
-              </span>
-              <button
-                type="button"
-                className="sw"
-                role="switch"
-                aria-checked={reviewedOnly}
-                aria-label="仅显示已审核"
-                onClick={() => setReviewedOnly((v) => !v)}
-              />
-            </div>
-          </div>
         </aside>
 
         <div className="panel">
@@ -359,6 +474,7 @@ const QuestionBank = () => {
             <div className="row">
               <span className="title-sm">题目列表</span>
               <span className="meta">{filtered.length} 道题</span>
+              {total != null && total > 100 && <span className="meta">仅显示前 100，共 {total} 条</span>}
             </div>
             <div className="seg">
               {SEG_TYPES.map((t) => (
@@ -388,7 +504,6 @@ const QuestionBank = () => {
                     <span className="tag">{q.sub}</span>
                     <span className="tag">{q.type}</span>
                     <span className="tag">{q.know}</span>
-                    {!q.reviewed && <span className="pill pill-warn">待审核</span>}
                   </div>
                   <div className="q-stem">{q.stem}</div>
                   {q.opts.length > 0 && (
@@ -405,12 +520,6 @@ const QuestionBank = () => {
                       参考答案 <b>{q.ans}</b>
                     </span>
                     <span>
-                      正确率 <b>{Math.round(q.p * 100)}%</b>
-                    </span>
-                    <span>
-                      使用 <b>{q.used}</b> 次
-                    </span>
-                    <span>
                       分值 <b>{q.score}</b> 分
                     </span>
                   </div>
@@ -418,11 +527,8 @@ const QuestionBank = () => {
                     <Button size="small" onClick={() => addToBasket(q.id)}>
                       加入组卷
                     </Button>
-                    <Button size="small" type="text" disabled title="P2 待接入：题目编辑表单待对接服务端">
+                    <Button size="small" type="text" onClick={() => openEditModal(q)}>
                       编辑
-                    </Button>
-                    <Button size="small" type="text" disabled title="P3 不做：服务端同类题检索未立项">
-                      替换同类题
                     </Button>
                   </div>
                 </div>
@@ -541,46 +647,98 @@ const QuestionBank = () => {
             value={targetExamId ?? undefined}
             onChange={(v) => setTargetExamId(v)}
             style={{ width: '100%' }}
-            placeholder={examOptions.length === 0 ? '暂无考试（后端不可用，仅演示占位）' : '选择考试'}
+            placeholder={examOptions.length === 0 ? '暂无考试（后端不可用，功能暂不可用）' : '选择考试'}
             options={examOptions}
           />
         </div>
-        <div className="gen-field">
-          <label htmlFor="paper-name">试卷名称</label>
-          <Input id="paper-name" value={paperName} onChange={(e) => setPaperName(e.target.value)} disabled title="P2待接入暂不生效" />
-        </div>
-        <div className="gen-grid">
-          <div className="gen-field">
-            <label htmlFor="paper-dur">考试时长（分钟）</label>
-            <Input id="paper-dur" value={duration} onChange={(e) => setDuration(e.target.value)} disabled title="P2待接入暂不生效" />
-          </div>
-          <div className="gen-field">
-            <label htmlFor="paper-group">发布班级</label>
-            <Select
-              id="paper-group"
-              value={publishClass}
-              onChange={(v) => setPublishClass(v)}
-              disabled
-              title="P2待接入暂不生效"
-              style={{ width: '100%' }}
-              options={[{ value: '计科 2401' }, { value: '计科 2402' }, { value: '计科 2401、2402' }].map((o) => ({
-                value: o.value,
-                label: o.value,
-              }))}
-            />
-          </div>
-        </div>
-        <div className="gen-checks">
-          <label className="check">
-            <input type="checkbox" defaultChecked /> 题目乱序
-          </label>
-          <label className="check">
-            <input type="checkbox" defaultChecked /> 选项乱序（防作弊）
-          </label>
-          <label className="check">
-            <input type="checkbox" /> 生成后立即发布给学生
-          </label>
-        </div>
+      </Modal>
+
+      <Modal
+        title={editingId == null ? '新建题目' : '编辑题目'}
+        open={qModalOpen}
+        onOk={() => void handleQuestionSubmit()}
+        onCancel={() => setQModalOpen(false)}
+        confirmLoading={qSubmitting}
+        okText={editingId == null ? '新建' : '保存'}
+        cancelText="取消"
+        width={640}
+      >
+        <Divider style={{ marginTop: 8 }} />
+        <Form form={qForm} layout="vertical" preserve={false}>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="type" label="题型" rules={[{ required: true, message: '请选择题型' }]}>
+                <Select options={TYPE_OPTIONS} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="score" label="分值" rules={[{ required: true, message: '请输入分值' }]}>
+                <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="difficulty" label="难度">
+                <Select allowClear placeholder="请选择难度" options={DIFFICULTY_OPTIONS} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="course_id" label="课程 ID" tooltip="题库题目必须归属学科课程" rules={[{ required: true, message: '请选择所属学科' }]}>
+                <InputNumber min={1} style={{ width: '100%' }} placeholder="请选择所属学科" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="tags" label="知识点标签" tooltip="对应后端 tags，第一个标签用于列表知识点展示">
+            <Select mode="tags" allowClear placeholder="输入知识点标签，回车确认" tokenSeparators={[',', '，']} />
+          </Form.Item>
+          <Form.Item name="content" label="题目内容" rules={[{ required: true, message: '请输入题目内容' }]}>
+            <Input.TextArea rows={3} placeholder="请输入题目内容" />
+          </Form.Item>
+
+          {qType && ['single', 'multiple'].includes(qType) && (
+            <Form.Item label="选项" required>
+              <Form.List name="options">
+                {(fields, { add, remove }) => (
+                  <>
+                    {fields.map((field, index) => (
+                      <div key={field.key} style={{ display: 'flex', marginBottom: 8, alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 20, textAlign: 'right' }}>{optionLetters(index)}.</span>
+                        <Form.Item
+                          {...field}
+                          name={field.name}
+                          rules={[{ required: true, message: '请输入选项内容' }]}
+                          noStyle
+                        >
+                          <Input placeholder="选项内容" style={{ width: 420 }} />
+                        </Form.Item>
+                        {fields.length > 2 && (
+                          <MinusCircleOutlined onClick={() => remove(field.name)} />
+                        )}
+                      </div>
+                    ))}
+                    <Button type="dashed" onClick={() => add('')} block icon={<PlusOutlined />}>
+                      添加选项
+                    </Button>
+                  </>
+                )}
+              </Form.List>
+            </Form.Item>
+          )}
+
+          {qType === 'judge' ? (
+            <Form.Item name="answer" label="正确答案" rules={[{ required: true, message: '请选择正确答案' }]}>
+              <Select>
+                <Select.Option value="true">正确</Select.Option>
+                <Select.Option value="false">错误</Select.Option>
+              </Select>
+            </Form.Item>
+          ) : (
+            <Form.Item name="answer" label="参考答案" rules={[{ required: true, message: '请输入参考答案' }]}>
+              <Input.TextArea rows={2} placeholder="客观题填选项（如 A 或 A,B），主观题填参考答案" />
+            </Form.Item>
+          )}
+        </Form>
       </Modal>
     </div>
   );

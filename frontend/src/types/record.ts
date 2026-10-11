@@ -25,4 +25,6 @@ export interface Paper {
   record_id: number;
   questions: Question[];
   saved_answers?: Record<string, AnswerValue>;
+  /** 考生已标记的题目 ID（作答过程数据，随保存持久化） */
+  marked_question_ids?: number[];
 }

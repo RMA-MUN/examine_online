@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS exam_records (
     score INT DEFAULT 0,
     status ENUM('ongoing', 'submitted', 'graded') DEFAULT 'ongoing',
     switch_count INT DEFAULT 0,
+    marked_question_ids JSON NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_student_exam (student_id, exam_id),
@@ -247,6 +248,32 @@ CREATE TABLE IF NOT EXISTS monitor_events (
     CONSTRAINT fk_monitor_record FOREIGN KEY (record_id) REFERENCES exam_records (id) ON DELETE CASCADE,
     CONSTRAINT fk_monitor_student FOREIGN KEY (student_id) REFERENCES users (id),
     CONSTRAINT fk_monitor_handled_by FOREIGN KEY (handled_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.13 审计日志
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id INT AUTO_INCREMENT,
+    actor_id INT NULL,
+    action VARCHAR(64) NOT NULL,
+    target_type VARCHAR(32) NULL,
+    target_id INT NULL,
+    ip VARCHAR(64) NULL,
+    detail JSON NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_audit_actor (actor_id),
+    KEY idx_audit_action_time (action, created_at),
+    CONSTRAINT fk_audit_actor FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2.14 系统参数（KV）
+CREATE TABLE IF NOT EXISTS system_params (
+    `key` VARCHAR(64) NOT NULL,
+    `value` TEXT NOT NULL,
+    updated_by INT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`key`),
+    CONSTRAINT fk_param_updated_by FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -452,6 +479,42 @@ SET @sql = IF(
     (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'monitor_events' AND COLUMN_NAME = 'handled_by') = 0,
     'ALTER TABLE monitor_events ADD COLUMN handled_by INT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.20 系统参数种子（仅补缺失 key，INSERT IGNORE 不覆盖管理员已改的值）
+INSERT IGNORE INTO system_params (`key`, `value`) VALUES
+    ('default.duration', '120'),
+    ('default.pass_score', '60'),
+    ('default.save_interval', '15'),
+    ('default.grace_seconds', '60'),
+    ('default.max_switch', '3'),
+    ('switch.show_objective_score', 'true'),
+    ('switch.show_answer', 'false'),
+    ('switch.auto_objective', 'true'),
+    ('switch.ai_assist', 'true'),
+    ('switch.double_review_audit', 'true'),
+    ('switch.allow_appeal', 'true');
+
+-- 3.21 answers.teacher_comment 列
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answers' AND COLUMN_NAME = 'teacher_comment') = 0,
+    'ALTER TABLE answers ADD COLUMN teacher_comment TEXT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.22 exam_records.marked_question_ids 列（考生作答页标记的题目）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'exam_records' AND COLUMN_NAME = 'marked_question_ids') = 0,
+    'ALTER TABLE exam_records ADD COLUMN marked_question_ids JSON NULL',
     'SELECT 1'
 );
 PREPARE statement FROM @sql;
