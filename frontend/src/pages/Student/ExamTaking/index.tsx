@@ -111,6 +111,40 @@ const ExamTaking = () => {
     };
   }, []);
 
+  // 监考事件产生端：失焦 / 粘贴 / 退出全屏（切屏另有 visibilitychange 上报），失败静默不阻塞作答
+  useEffect(() => {
+    const id = Number(examId);
+    let lastPasteAt = 0;
+    const report = async (type: string, detail?: Record<string, unknown>) => {
+      try {
+        await reportEvent(id, type, detail);
+      } catch {
+        /* 明细上报失败不阻塞作答 */
+      }
+    };
+    // 窗口失焦但页面未隐藏（如点到浏览器地址栏）——页面隐藏场景由切屏上报覆盖，避免一次行为双报
+    const handleBlur = () => {
+      if (!document.hidden) report('blur');
+    };
+    const handlePaste = (e: ClipboardEvent) => {
+      const now = Date.now();
+      if (now - lastPasteAt < 2000) return;
+      lastPasteAt = now;
+      report('paste', { target: (e.target as HTMLElement | null)?.tagName ?? null });
+    };
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) report('fullscreen_exit');
+    };
+    window.addEventListener('blur', handleBlur);
+    document.addEventListener('paste', handlePaste, true);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      window.removeEventListener('blur', handleBlur);
+      document.removeEventListener('paste', handlePaste, true);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [examId]);
+
   // 全屏公告轮询（10s）：仅展示未见过的新公告，失败静默（不阻塞作答）
   useEffect(() => {
     let cancelled = false;
@@ -178,16 +212,38 @@ const ExamTaking = () => {
     return () => clearInterval(timer);
   }, [timeLeft, handleSubmit]);
 
-  // 自动保存(原逻辑,30s)
+  // 自动保存（30s）：带上标记题目；响应非 200 说明记录已不在进行中
+  // （被监考强制交卷 / 超时 / 已交卷），学生的正确动作一致——结束作答离开
+  const endedNotified = useRef(false);
+  const handleExamEnded = useCallback(() => {
+    if (endedNotified.current) return;
+    endedNotified.current = true;
+    Modal.confirm({
+      title: '考试已结束',
+      content: '本次作答已被结束（可能被监考老师收取或考试时间已到），即将返回考试记录。',
+      okText: '知道了',
+      cancelButtonProps: { style: { display: 'none' } },
+      keyboard: false,
+      maskClosable: false,
+      onOk: () => navigate('/my-records'),
+    });
+  }, [navigate]);
+
   useEffect(() => {
     const timer = setInterval(async () => {
-      if (Object.keys(answers).length > 0) {
-        await saveAnswers(Number(examId), answers);
+      try {
+        const res = await saveAnswers(Number(examId), answers, marked);
+        if (res.code !== 200) {
+          handleExamEnded();
+          return;
+        }
         setLastSavedAt(new Date());
+      } catch {
+        /* 网络异常时跳过本轮，下一轮重试 */
       }
     }, 30000);
     return () => clearInterval(timer);
-  }, [answers, examId]);
+  }, [answers, marked, examId, handleExamEnded]);
 
   useEffect(() => {
     const fetchPaper = async () => {
@@ -199,6 +255,7 @@ const ExamTaking = () => {
         }
         setPaper(res.data);
         setAnswers(res.data.saved_answers || {});
+        setMarked(res.data.marked_question_ids || []);
         setLoadError(null);
       } catch (error) {
         setLoadError('获取试卷失败');

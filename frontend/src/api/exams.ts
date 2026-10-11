@@ -41,8 +41,12 @@ export const startExam = (examId: number): Promise<ApiResponse<unknown>> =>
 export const getPaper = (examId: number): Promise<ApiResponse<Paper>> =>
   axios.get(`/api/exams/${examId}/paper`) as Promise<ApiResponse<Paper>>;
 
-export const saveAnswers = (examId: number, answers: Record<string, AnswerValue>): Promise<ApiResponse<unknown>> =>
-  axios.post(`/api/exams/${examId}/save`, answers) as Promise<ApiResponse<unknown>>;
+export const saveAnswers = (
+  examId: number,
+  answers: Record<string, AnswerValue>,
+  marked?: number[]
+): Promise<ApiResponse<unknown>> =>
+  axios.post(`/api/exams/${examId}/save`, { answers, marked: marked ?? [] }) as Promise<ApiResponse<unknown>>;
 
 export const submitExam = (examId: number, answers: Record<string, AnswerValue>): Promise<ApiResponse<{ score: number }>> =>
   axios.post(`/api/exams/${examId}/submit`, { answers }) as Promise<ApiResponse<{ score: number }>>;

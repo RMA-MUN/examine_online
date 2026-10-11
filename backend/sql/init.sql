@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS exam_records (
     score INT DEFAULT 0,
     status ENUM('ongoing', 'submitted', 'graded') DEFAULT 'ongoing',
     switch_count INT DEFAULT 0,
+    marked_question_ids JSON NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_student_exam (student_id, exam_id),
@@ -503,6 +504,17 @@ SET @sql = IF(
     (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'answers' AND COLUMN_NAME = 'teacher_comment') = 0,
     'ALTER TABLE answers ADD COLUMN teacher_comment TEXT NULL',
+    'SELECT 1'
+);
+PREPARE statement FROM @sql;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+-- 3.22 exam_records.marked_question_ids 列（考生作答页标记的题目）
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'exam_records' AND COLUMN_NAME = 'marked_question_ids') = 0,
+    'ALTER TABLE exam_records ADD COLUMN marked_question_ids JSON NULL',
     'SELECT 1'
 );
 PREPARE statement FROM @sql;

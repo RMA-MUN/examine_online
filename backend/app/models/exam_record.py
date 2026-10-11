@@ -1,6 +1,6 @@
 """考试记录模型模块：记录考生参与考试的过程与结果。"""
 
-from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Enum, DateTime, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -18,6 +18,7 @@ class ExamRecord(Base):
     score = Column(Integer, default=0)
     status = Column(Enum("ongoing", "submitted", "graded"), default="ongoing")  # 记录状态：ongoing=进行中, submitted=已交卷, graded=已评分
     switch_count = Column(Integer, default=0, comment="切屏次数")
+    marked_question_ids = Column(JSON, nullable=True, comment="考生标记的题目 ID 列表（作答过程数据，交卷后无意义）")
     created_at = Column(DateTime, server_default=func.now())
 
     student = relationship("User", backref="exam_records")

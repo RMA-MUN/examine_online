@@ -22,6 +22,13 @@ const ExamList = () => {
   const navigate = useNavigate();
 
   const handleStart = async (record: Exam) => {
+    // 进入考试即请求全屏：必须在用户点击手势内同步发起，SPA 内跳转不丢全屏态，
+    // 作答页的「退出全屏」监考事件由此有产生源；浏览器拒绝时照常考试
+    try {
+      await document.documentElement.requestFullscreen();
+    } catch {
+      /* 用户取消或环境不支持时不阻塞开考 */
+    }
     try {
       const res = await startExam(record.id);
       if (res.code !== 200) {
