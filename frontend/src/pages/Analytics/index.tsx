@@ -86,8 +86,7 @@ function normalizeAnalytics(data: unknown): AnalyticsData {
   };
 }
 
-// 未分班（class_id 为 null）的下拉 value：后端 class_id 过滤无法表达 NULL，
-// 选中时等同于全部（见班级 filter 说明）。
+// 未分班（class_id 为 null）的下拉 value：请求时映射为 class_id=-1，后端按 IS NULL 过滤。
 const UNASSIGNED_VALUE = '__unassigned__';
 
 const Analytics = () => {
@@ -164,7 +163,10 @@ const Analytics = () => {
       page: 1,
       page_size: 100,
     };
-    if (classFilter !== 'all' && classFilter !== UNASSIGNED_VALUE && Number.isFinite(classIdNum)) {
+    if (classFilter === UNASSIGNED_VALUE) {
+      // -1 = 未分班（class_id IS NULL），后端与 users 筛选同一约定
+      params.class_id = -1;
+    } else if (classFilter !== 'all' && Number.isFinite(classIdNum)) {
       params.class_id = classIdNum;
     }
     getExamStudentScores(examId, params)
