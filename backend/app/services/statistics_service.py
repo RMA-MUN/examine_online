@@ -92,7 +92,7 @@ async def export_exam_scores(db: AsyncSession, exam_id: int):
     return export_data
 
 async def _get_overview_extension(db: AsyncSession, course_ids: list[int] | None = None) -> dict:
-    """总览扩展 8 字段：纯聚合现有表（范围 seg 后端分页本次不做，前端仍读 mock 三档）。
+    """总览扩展 8 字段：纯聚合现有表（范围 seg 后端分页本次不做）。
 
     - online：在考记录数（status=ongoing）；teacher 按名下课程过滤
     - peak：今日开考数与 online 取大（无历史峰值表，用当日量近似）
