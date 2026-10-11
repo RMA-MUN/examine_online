@@ -187,7 +187,7 @@ const Dashboard = () => {
       const values = await examForm.validateFields();
       setNewExamOpen(false);
       examForm.resetFields();
-      // 表单值随路由透传，复用现有 ExamEdit（/exams/new）继续组卷
+      // 表单值随路由透传，复用现有 ExamEdit（/exams/new）继续组卷（ExamEdit 会读取并回填）
       navigate('/exams/new', { state: values });
     } catch {
       /* 校验失败时 inline 提示即可，不关窗 */
@@ -271,10 +271,9 @@ const Dashboard = () => {
       <section className="page-head">
         <div>
           <h1 className="title-lg">考试运行总览</h1>
-          <p className="page-sub">教务处 · 第 3 教学周{user?.name || user?.username ? ` · 你好，${user?.name || user?.username}` : ''}</p>
+          <p className="page-sub">{user?.name || user?.username ? `你好，${user?.name || user?.username}` : '欢迎回来'}</p>
         </div>
         <div className="toolbar">
-          <span className="meta">实时快照</span>
           {!isStudent && (
             <Button
               icon={<FileExcelOutlined />}

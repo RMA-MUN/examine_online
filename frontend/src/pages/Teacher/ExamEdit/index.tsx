@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined, MinusCircleOutlined, SaveOutlined, UploadOutlined } from '@ant-design/icons';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import {
   getExam, createExam, updateExam, getExamQuestions, createQuestion, deleteQuestion,
@@ -16,7 +16,7 @@ import PageHeader from '../../../components/PageHeader';
 import ImportModal from '../../../components/ImportModal';
 import { QUESTION_TYPE_META, QUESTION_TYPES, getQuestionTypeMeta } from '../../../constants/questionTypes';
 import type { ExamFormValues } from '../../../types/exam';
-import type { ExamInput } from '../../../types/exam';
+import type { ExamInput, StudentOverride } from '../../../types/exam';
 import type { Course } from '../../../types/course';
 import type { Class } from '../../../types/class';
 import type { Question, QuestionType, QuestionFormValues, QuestionInput } from '../../../types/question';
@@ -30,6 +30,7 @@ const ExamEdit = () => {
   const { examId } = useParams();
   const isNew = examId === undefined || examId === 'new';
   const navigate = useNavigate();
+  const location = useLocation();
   const [examForm] = Form.useForm<ExamFormValues>();
   const [questionForm] = Form.useForm<QuestionFormValues>();
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -43,6 +44,9 @@ const ExamEdit = () => {
   const [questionPage, setQuestionPage] = useState(1);
   const [questionPageSize, setQuestionPageSize] = useState(10);
   const [importModalVisible, setImportModalVisible] = useState(false);
+  // 后端保存 student_overrides 是整体替换：表单只编辑 exclude，
+  // 已有的 include（额外指定考生）必须原样带上，否则每次保存都会被删掉
+  const [keptIncludes, setKeptIncludes] = useState<StudentOverride[]>([]);
   const questionType = Form.useWatch<QuestionType>('type', questionForm);
 
   const fetchData = async () => {
@@ -57,6 +61,15 @@ const ExamEdit = () => {
       } catch (error) {
         message.error('加载课程或班级列表失败');
       }
+      // 总览页「新建考试」弹窗经路由 state 透传的基础信息（name/duration/total），映射回填表单
+      const preset = (location.state ?? null) as { name?: string; duration?: number; total?: number } | null;
+      if (preset) {
+        examForm.setFieldsValue({
+          ...(preset.name ? { title: preset.name } : {}),
+          ...(preset.duration ? { duration: preset.duration } : {}),
+          ...(preset.total ? { total_score: preset.total } : {}),
+        });
+      }
       return;
     }
     setLoading(true);
@@ -70,6 +83,8 @@ const ExamEdit = () => {
       setQuestions(questionsRes.data.items || []);
       setQuestionTotal(questionsRes.data.total || 0);
       setClasses(classesRes.data.items || []);
+      const overrides = examData.student_overrides ?? [];
+      setKeptIncludes(overrides.filter((o) => o.action === 'include'));
       examForm.setFieldsValue({
         title: examData.title,
         description: examData.description ?? undefined,
@@ -81,9 +96,7 @@ const ExamEdit = () => {
         random_order: examData.random_order,
         max_switch: examData.max_switch,
         class_ids: examData.assigned_class_ids ?? [],
-        // 编辑时仅回填 exclude 覆盖；编辑保存只会提交 exclude 列表，
-        // 通过 API 直接创建的 include 覆盖（额外添加的学生）在此会被丢弃
-        exclude_student_ids: (examData.student_overrides ?? [])
+        exclude_student_ids: overrides
           .filter((o) => o.action === 'exclude')
           .map((o) => String(o.student_id)),
       });
@@ -118,9 +131,13 @@ const ExamEdit = () => {
         random_order: values.random_order,
         max_switch: values.max_switch,
         class_ids: (values.class_ids as number[]) || [],
-        student_overrides: ((values.exclude_student_ids as string[]) || [])
-          .map((v: string) => ({ student_id: Number(v), action: 'exclude' as const }))
-          .filter((o) => !Number.isNaN(o.student_id)),
+        // 整体替换语义：include 原样保留 + 表单编辑的 exclude，二者合并提交
+        student_overrides: [
+          ...keptIncludes,
+          ...((values.exclude_student_ids as string[]) || [])
+            .map((v: string) => ({ student_id: Number(v), action: 'exclude' as const }))
+            .filter((o) => !Number.isNaN(o.student_id)),
+        ],
       };
       if (isNew) {
         const created = await createExam({ ...payload, course_id: values.course_id as number });
