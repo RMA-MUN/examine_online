@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { App, Button, Collapse, Input, InputNumber, Space, Spin, Switch, Tag } from 'antd';
+import { App, Button, Collapse, Input, InputNumber, Popconfirm, Space, Spin, Switch, Tag } from 'antd';
 import { gradeAnswer, finalizeRecord, retryAiGrading } from '../../../api/grading';
 import type { GradeRequest } from '../../../types/answer';
 import { shouldShowAiGrading } from '../../../utils/aiGrading';
@@ -172,7 +172,9 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
       message.success('终评成功');
       onChanged?.();
     } catch (error) {
-      message.error('终评失败');
+      // 后端在主观题未批改完时返回 400 + detail，优先展示具体原因
+      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      message.error(detail || '终评失败');
     }
   };
 
@@ -197,6 +199,38 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
     ? (Math.abs(myScore - aiScore) / full) * 100
     : null;
   const overThreshold = diffPct != null && diffPct > 10;
+
+  // 快捷键：Enter 提交并下一篇 · 数字 1–9 勾选对应评分点。
+  // 焦点在输入类控件或按钮上时忽略，避免与原生交互（按钮 Enter 点击、输入框回车）重复触发
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(target.tagName) ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === 'Enter') {
+        if (!current) return;
+        e.preventDefault();
+        void handleSave(current).then((ok) => {
+          if (ok) onNext?.();
+        });
+        return;
+      }
+      const n = Number(e.key);
+      if (Number.isInteger(n) && n >= 1 && n <= 9 && current) {
+        const pt = points[n - 1];
+        if (!pt) return;
+        e.preventDefault();
+        togglePoint(current.id, pt.id);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [current, points, handleSave, onNext, togglePoint]);
 
   if (!record) {
     return (
@@ -292,7 +326,7 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
 
         <div className="panel">
           <div className="panel-head">
-            <span className="title-sm">双评对比</span>
+            <span className="title-sm">AI 预评对比</span>
             {diffPct == null ? (
               <span className="pill pill-neutral">待评分</span>
             ) : (
@@ -304,11 +338,11 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
           <div className="panel-body">
             <div className="cols-2" style={{ gap: 12 }}>
               <div>
-                <div className="label">一评 · 本次评分</div>
+                <div className="label">本次评分</div>
                 <div className="kpi-num" style={{ fontSize: 22, marginTop: 6 }}>{current ? myScore : '—'}</div>
               </div>
               <div>
-                <div className="label">二评 · AI 预评</div>
+                <div className="label">AI 预评</div>
                 <div className="kpi-num" style={{ fontSize: 22, marginTop: 6 }}>{aiScore ?? '—'}</div>
               </div>
             </div>
@@ -487,9 +521,18 @@ const Workspace = ({ record, answers, loading, selectedIdx, onSelectIdx, onChang
                 下一篇
               </button>
             </div>
-            <button type="button" className="btn btn-secondary btn-block" disabled={!current} onClick={handleFinalize}>
-              终评
-            </button>
+            <Popconfirm
+              title="确认终评？"
+              description="终评将锁定该生成绩，且要求全部主观题已完成批改。"
+              okText="确认终评"
+              cancelText="取消"
+              disabled={!current}
+              onConfirm={handleFinalize}
+            >
+              <button type="button" className="btn btn-secondary btn-block" disabled={!current}>
+                终评
+              </button>
+            </Popconfirm>
             <p className="meta" style={{ textAlign: 'center' }}>快捷键：Enter 提交并下一篇 · 1–9 勾选评分点</p>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { App, Table, Button, Select, Space, Modal } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useSearchParams } from 'react-router-dom';
@@ -76,23 +76,22 @@ const Grading = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId, page, pageSize]);
 
+  const fetchStats = useCallback(async (id: number) => {
+    try {
+      const res = await getGradingStats(id);
+      setGradingStats(res.data);
+    } catch {
+      setGradingStats(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!examId) {
       setGradingStats(null);
       return;
     }
-    let cancelled = false;
-    getGradingStats(examId)
-      .then((res) => {
-        if (!cancelled) setGradingStats(res.data);
-      })
-      .catch(() => {
-        if (!cancelled) setGradingStats(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [examId]);
+    fetchStats(examId);
+  }, [examId, fetchStats]);
 
   const selectedRecord: ExamRecord | null =
     records.find((r) => r.id === selectedRecordId) ?? records[0] ?? null;
@@ -167,9 +166,11 @@ const Grading = () => {
 
   const selectedExam = exams.find((e) => e.id === examId) ?? null;
   const examTitle = selectedExam?.title ?? '未选择考试';
-  const pending = records.filter((r) => r.status !== 'graded').length;
-  const done = records.filter((r) => r.status === 'graded').length;
-  const progressPct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+  // KPI 用后端 grading-stats 的全量口径；页内 records 只是当前分页，用它过滤会失真
+  const pending = gradingStats?.pending ?? 0;
+  const done = gradingStats?.done ?? 0;
+  const statsTotal = gradingStats?.total ?? 0;
+  const progressPct = statsTotal > 0 ? Math.min(100, (done / statsTotal) * 100) : 0;
   const headTitle = mode === 'by-question'
     ? `《${examTitle}》· 第 ${selectedQuestionIdx + 1} 题`
     : `《${examTitle}》· ${selectedRecord?.student?.name ?? '—'}`;
@@ -227,7 +228,7 @@ const Grading = () => {
         <div className="kpi">
           <div className="label">已阅份数</div>
           <div className="kpi-num">{done}</div>
-          <div className="kpi-foot">今日进度 <span className="num">{progressPct.toFixed(1)}%</span></div>
+          <div className="kpi-foot">完成进度 <span className="num">{progressPct.toFixed(1)}%</span></div>
         </div>
         <div className="kpi">
           <div className="label">平均用时</div>
@@ -238,7 +239,7 @@ const Grading = () => {
           </div>
         </div>
         <div className="kpi">
-          <div className="label">双评一致性</div>
+          <div className="label">AI 一致率</div>
           <div className="kpi-num">
             {gradingStats?.consistency_rate != null
               ? <>{(gradingStats.consistency_rate * 100).toFixed(1)}<span style={{ fontSize: 15, fontWeight: 500 }}>%</span></>
@@ -258,7 +259,7 @@ const Grading = () => {
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
             <div className="between" style={{ marginBottom: 6 }}>
               <span className="meta">批次进度</span>
-              <span className="num meta">{done} / {total}</span>
+              <span className="num meta">{done} / {statsTotal}</span>
             </div>
             <div className="bar-thick"><i style={{ width: `${progressPct}%` }} /></div>
           </div>
@@ -316,7 +317,10 @@ const Grading = () => {
           selectedIdx={Math.min(selectedQuestionIdx, Math.max(0, answers.length - 1))}
           onSelectIdx={setSelectedQuestionIdx}
           onChanged={() => {
-            if (examId) fetchRecords(examId, page, pageSize);
+            if (examId) {
+              fetchRecords(examId, page, pageSize);
+              fetchStats(examId);
+            }
           }}
           onNext={handleNext}
         />

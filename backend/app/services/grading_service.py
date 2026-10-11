@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import json
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.models.exam_record import ExamRecord
@@ -187,12 +188,34 @@ async def recalculate_total_score(db: AsyncSession, record_id: int, commit: bool
 async def finalize_record(db: AsyncSession, record_id: int):
     """完成批改：记录状态由 submitted 流转为 graded。
 
+    存在未完成批改的主观题（简答且 grading_source 仍为 pending/failed）时拒绝定档，
+    避免未判题按 0 分计入总分后被锁定。
+
     :return: 更新后的记录对象；记录不存在时返回 None
+    :raises HTTPException: 400 主观题未批改完
     """
     result = await db.execute(select(ExamRecord).where(ExamRecord.id == record_id))
     record = result.scalar_one_or_none()
     if not record:
         return None
+
+    # 客观题交卷时已判分，不计入；AI 已出分（ai）的视为已判，教师可事后复核
+    result = await db.execute(
+        select(func.count())
+        .select_from(Answer)
+        .join(Question, Answer.question_id == Question.id)
+        .where(
+            Answer.record_id == record_id,
+            Question.type == "essay",
+            Answer.grading_source.in_(["pending", "failed"]),
+        )
+    )
+    ungraded = result.scalar() or 0
+    if ungraded > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"还有 {ungraded} 道主观题未完成批改，无法终评",
+        )
 
     record.status = "graded"
     await db.commit()
