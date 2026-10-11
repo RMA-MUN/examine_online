@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
 from app.services.audit_service import list_logs
-from app.services.system_param_service import get_all_params, upsert_params
+from app.services.system_param_service import get_all_params, upsert_params, DEFAULT_PARAMS
 from app.services.audit_service import log_action
 from app.utils.deps import require_role
 from app.utils.response import success_response, paginated_response
@@ -36,6 +36,14 @@ async def read_params(
 ):
     """读取全部系统参数，仅管理员可调用。"""
     return success_response(data=await get_all_params(db))
+
+
+@router.get("/api/admin/params/defaults")
+async def read_default_params(
+    _: User = Depends(require_role(["admin"])),
+):
+    """读取系统参数出厂默认值（与 GET /params 同形状），供「恢复默认」使用，仅管理员可调用。"""
+    return success_response(data=dict(DEFAULT_PARAMS))
 
 
 @router.put("/api/admin/params")

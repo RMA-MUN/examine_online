@@ -22,7 +22,7 @@ const TABS: Array<{ key: TabKey; label: string }> = [
 /** 角色矩阵：23 项照抄参考 admin.html；后端仅 student/teacher/admin 三角色，teacher 取教师/阅卷教师并集，admin 取教务/系统管理员并集。 */
 const PERM_GROUPS: Array<{ cat: string; items: string[] }> = [
   { cat: '考试', items: ['查看考试列表与安排', '进入并作答考试', '创建 / 编辑考试', '结束考试并强制交卷'] },
-  { cat: '阅卷', items: ['查看阅卷队列', '提交主观题评分', '发起双评与仲裁', '批量调整分值'] },
+  { cat: '阅卷', items: ['查看阅卷队列', '提交主观题评分', '复核 AI 预评分', '批量调整分值'] },
   { cat: '题库', items: ['浏览与检索题库', '新建 / 编辑题目', '审核题目入库', '导出题库'] },
   { cat: '成绩', items: ['查看个人成绩', '查看班级成绩分析', '发布成绩', '导出成绩报表'] },
   { cat: '监考', items: ['查看监控墙', '下发警告 / 处置异常', '配置防作弊策略'] },
@@ -36,7 +36,7 @@ const PERM_DEFAULT: Record<string, [boolean, boolean, boolean]> = {
   '结束考试并强制交卷': [false, false, true],
   '查看阅卷队列': [false, true, true],
   '提交主观题评分': [false, true, true],
-  '发起双评与仲裁': [false, true, true],
+  '复核 AI 预评分': [false, true, true],
   '批量调整分值': [false, true, true],
   '浏览与检索题库': [false, true, true],
   '新建 / 编辑题目': [false, true, true],
@@ -180,6 +180,18 @@ const Admin = () => {
         applyParams(map);
       })
       .catch(() => message.error('获取系统参数失败'));
+  };
+
+  // 恢复默认：取后端出厂默认值（GET /api/admin/params/defaults），非放弃未保存的修改
+  const restoreDefaults = () => {
+    axios
+      .get('/api/admin/params/defaults')
+      .then((res: unknown) => {
+        const map = (res as ApiResponse<Record<string, string>>)?.data ?? {};
+        applyParams(map);
+        message.success('已恢复为默认值，保存后生效');
+      })
+      .catch(() => message.error('获取默认参数失败'));
   };
 
   const handleSaveParams = async () => {
@@ -565,7 +577,8 @@ const Admin = () => {
               </div>
             </div>
             <div className="row" style={{ justifyContent: 'flex-end', marginTop: 18, gap: 8 }}>
-              <Button onClick={loadParams}>恢复默认</Button>
+              <Button onClick={restoreDefaults}>恢复默认</Button>
+              <Button onClick={loadParams}>重置修改</Button>
               <Button type="primary" onClick={() => void handleSaveParams()}>
                 保存参数
               </Button>

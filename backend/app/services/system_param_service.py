@@ -12,6 +12,21 @@ ALLOWED_PARAM_KEYS = frozenset({
     "switch.ai_assist", "switch.double_review_audit", "switch.allow_appeal",
 })
 
+# 出厂默认值：与前端管理页表单初值保持一致，「恢复默认」以此为唯一契约来源
+DEFAULT_PARAMS: dict[str, str] = {
+    "default.duration": "120",
+    "default.pass_score": "60",
+    "default.save_interval": "15",
+    "default.grace_seconds": "60",
+    "default.max_switch": "3",
+    "switch.show_objective_score": "true",
+    "switch.show_answer": "false",
+    "switch.auto_objective": "true",
+    "switch.ai_assist": "true",
+    "switch.double_review_audit": "true",
+    "switch.allow_appeal": "true",
+}
+
 
 async def get_all_params(db: AsyncSession) -> dict[str, str]:
     """返回全部参数的 {key: value} 映射。"""
