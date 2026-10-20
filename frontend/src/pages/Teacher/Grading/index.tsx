@@ -11,6 +11,7 @@ import type { ExamRecord, RecordStatus } from '../../../types/record';
 import type { Answer } from '../../../types/answer';
 import StatusTag from '../../../components/StatusTag';
 import Workspace, { type GradingMode } from './Workspace';
+import GradingDrawer from './GradingDrawer';
 import './index.css';
 
 const statusText: Record<RecordStatus, string> = {
@@ -33,6 +34,8 @@ const Grading = () => {
   const [pageSize, setPageSize] = useState(10);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null);
+  const [drawerRecord, setDrawerRecord] = useState<ExamRecord | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [answersLoading, setAnswersLoading] = useState(false);
   const [selectedQuestionIdx, setSelectedQuestionIdx] = useState(0);
@@ -131,6 +134,14 @@ const Grading = () => {
     if (next) setSelectedRecordId(next.id);
   };
 
+  // 工作区与整卷抽屉判分/终评后共用：刷新记录列表与统计
+  const refreshAfterChange = () => {
+    if (examId) {
+      fetchRecords(examId, page, pageSize);
+      fetchStats(examId);
+    }
+  };
+
   const columns: ColumnsType<ExamRecord> = [
     { title: '学生姓名', dataIndex: ['student', 'name'], key: 'student_name' },
     { title: '用户名', dataIndex: ['student', 'username'], key: 'username' },
@@ -156,7 +167,14 @@ const Grading = () => {
       width: 100,
       render: (_, record) => (
         <Space>
-          <Button type="link" onClick={() => setSelectedRecordId(record.id)}>
+          <Button
+            type="link"
+            onClick={() => {
+              setSelectedRecordId(record.id);
+              setDrawerRecord(record);
+              setDrawerOpen(true);
+            }}
+          >
             阅卷
           </Button>
         </Space>
@@ -316,15 +334,17 @@ const Grading = () => {
           loading={answersLoading}
           selectedIdx={Math.min(selectedQuestionIdx, Math.max(0, answers.length - 1))}
           onSelectIdx={setSelectedQuestionIdx}
-          onChanged={() => {
-            if (examId) {
-              fetchRecords(examId, page, pageSize);
-              fetchStats(examId);
-            }
-          }}
+          onChanged={refreshAfterChange}
           onNext={handleNext}
         />
       </section>
+
+      <GradingDrawer
+        record={drawerRecord}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onChanged={refreshAfterChange}
+      />
 
       <div className="panel" style={{ marginTop: 16 }}>
         <div className="panel-head">

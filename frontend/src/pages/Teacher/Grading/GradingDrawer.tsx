@@ -14,7 +14,7 @@ import type { ExamRecord } from '../../../types/record';
 import type { Answer, GradeRequest } from '../../../types/answer';
 import type { QuestionType } from '../../../types/question';
 
-/** @deprecated 已被 Workspace 内联替代，仅保留作 AI 回归锚点，勿再挂载；改判分语义需双改或抽 hook */
+/** 整卷阅卷抽屉：从记录表「阅卷」打开，逐题展示该生答卷。与顶部 Workspace 共用判分语义，改判分逻辑需两处同步（或后续抽 hook）。 */
 
 interface GradingDrawerProps {
   record: ExamRecord | null;
@@ -145,7 +145,9 @@ const GradingDrawer = ({ record, open, onClose, onChanged }: GradingDrawerProps)
       onChanged?.();
       onClose();
     } catch (error) {
-      message.error('终评失败');
+      // 后端在主观题未批改完时返回 400 + detail，优先展示具体原因
+      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      message.error(detail || '终评失败');
     }
   };
 
