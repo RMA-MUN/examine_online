@@ -92,9 +92,9 @@ body,
   --shadow-modal: 0 14px 44px rgba(0, 0, 0, 0.52);
 
   --mj-primary: #5FB87E;
-  --mj-sider-bg: #141F19;
-  --mj-content-bg: #101915;
-  --mj-border: #2E4238;
+  --mj-sider-bg: #131C26;
+  --mj-content-bg: #16202C;
+  --mj-border: #33455C;
 }
 
 * {
