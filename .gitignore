@@ -12,6 +12,7 @@ backend/.env.*
 .opencode/
 .codegraph/
 .superpowers/
+.zcode/
 .worktrees/
 .idea/
 .vscode/
